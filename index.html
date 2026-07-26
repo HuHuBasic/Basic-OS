@@ -712,23 +712,23 @@ body {
 <div class="desktop" id="desktop">
   <div class="desktop-grid"></div>
   <div class="desktop-icons" id="desktopIcons">
-    <div class="desk-icon" ondblclick="openWindow('browser')" data-app="browser">
+    <div class="desk-icon" onclick="openWindow('browser')" data-app="browser">
       <div class="icon-img icon-browser">🌐</div>
       <span class="icon-label">Browser</span>
     </div>
-    <div class="desk-icon" ondblclick="openWindow('settings')" data-app="settings">
+    <div class="desk-icon" onclick="openWindow('settings')" data-app="settings">
       <div class="icon-img icon-settings">⚙️</div>
       <span class="icon-label">Settings</span>
     </div>
-    <div class="desk-icon" ondblclick="openWindow('store')" data-app="store">
+    <div class="desk-icon" onclick="openWindow('store')" data-app="store">
       <div class="icon-img icon-store">🛒</div>
       <span class="icon-label">App Store</span>
     </div>
-    <div class="desk-icon" ondblclick="openWindow('terminal')" data-app="terminal">
+    <div class="desk-icon" onclick="openWindow('terminal')" data-app="terminal">
       <div class="icon-img icon-terminal">⬛</div>
       <span class="icon-label">Terminal</span>
     </div>
-    <div class="desk-icon" ondblclick="openWindow('upgrade')" data-app="upgrade">
+    <div class="desk-icon" onclick="openWindow('upgrade')" data-app="upgrade">
       <div class="icon-img icon-settings">🔄</div>
       <span class="icon-label">Upgrade</span>
     </div>
@@ -845,8 +845,8 @@ body {
   </div>
   <div class="browser-toolbar">
     <div class="browser-nav-btns">
-      <button title="后退">◀</button>
-      <button title="前进">▶</button>
+      <button title="后退" onclick="browserGoBack()">◀</button>
+      <button title="前进" onclick="browserGoForward()">▶</button>
       <button title="刷新" onclick="refreshBrowser()">↻</button>
     </div>
     <div class="browser-url-bar">
@@ -1057,6 +1057,10 @@ body {
         <h4>📋 更新日志</h4>
         <div class="upgrade-item">
           <span class="ver-tag new">v2.0</span>
+          <span style="font-size:0.78rem">全新桌面环境、现代浏览器、系统设置、应用商店、系统升级功能</span>
+        </div>
+        <div class="upgrade-item">
+          <span class="ver-tag">v2.0</span>
           <span style="font-size:0.78rem">全新桌面环境、现代浏览器、系统设置、应用商店、系统升级功能</span>
         </div>
         <div class="upgrade-item">
@@ -1596,11 +1600,47 @@ function navigateTo(url) {
   document.getElementById('browserHome').style.display = 'none';
   document.getElementById('browserFrame').style.display = '';
   document.getElementById('browserFrame').src = url;
+  // Add to browser history
+  addToBrowserHistory(url);
   // Update tab
   const activeTab = document.querySelector('#browserTabs .browser-tab.active');
   if (activeTab) {
-    const hostname = new URL(url).hostname;
-    activeTab.innerHTML = '🌐 ' + hostname + '<span class="tab-close" onclick="event.stopPropagation();closeBrowserTab(this)">✕</span>';
+    try { const hostname = new URL(url).hostname; activeTab.innerHTML = '🌐 ' + hostname + '<span class="tab-close" onclick="event.stopPropagation();closeBrowserTab(this)">✕</span>'; } catch(e) {}
+  }
+}
+
+// Browser history management
+let browserHistory = [];
+let browserHistoryIndex = -1;
+
+function addToBrowserHistory(url) {
+  // Remove any forward history if we're navigating from middle of history
+  if (browserHistoryIndex < browserHistory.length - 1) {
+    browserHistory = browserHistory.slice(0, browserHistoryIndex + 1);
+  }
+  browserHistory.push(url);
+  browserHistoryIndex = browserHistory.length - 1;
+}
+
+function browserGoBack() {
+  if (browserHistoryIndex > 0) {
+    browserHistoryIndex--;
+    const url = browserHistory[browserHistoryIndex];
+    document.getElementById('browserUrl').value = url;
+    document.getElementById('browserHome').style.display = 'none';
+    document.getElementById('browserFrame').style.display = '';
+    document.getElementById('browserFrame').src = url;
+  }
+}
+
+function browserGoForward() {
+  if (browserHistoryIndex < browserHistory.length - 1) {
+    browserHistoryIndex++;
+    const url = browserHistory[browserHistoryIndex];
+    document.getElementById('browserUrl').value = url;
+    document.getElementById('browserHome').style.display = 'none';
+    document.getElementById('browserFrame').style.display = '';
+    document.getElementById('browserFrame').src = url;
   }
 }
 
@@ -1777,8 +1817,8 @@ function handleTerminalInput(e) {
   if (cmd === 'help') {
     out.innerHTML = '可用命令: help, clear, echo, time, mem, version, apps, install, run, uninstall, desktop, settings, store, upgrade, browser, about, shutdown<br>';
   } else if (cmd === 'clear') {
-    body.innerHTML = '<span class="prompt">kernel&gt;</span> <span class="cmd"><input type="text" id="terminalInput" style="background:none;border:none;color:var(--ink);font-family:GeistMono,monospace;font-size:0.78rem;outline:none;width:200px" onkeydown="handleTerminalInput(event)"></span>';
-    document.getElementById('terminalInput').focus();
+    body.innerHTML = '<span class="prompt">kernel&gt;</span> <span class="cmd"><input type="text" class="term-input" style="background:none;border:none;color:var(--ink);font-family:GeistMono,monospace;font-size:0.78rem;outline:none;width:200px" onkeydown="handleTerminalInput(event)"></span>';
+    body.querySelector('.term-input').focus();
     return;
   } else if (cmd === 'time') {
     out.innerHTML = '系统时间: ' + new Date().toLocaleString('zh-CN') + '<br>';
@@ -1821,6 +1861,8 @@ function handleTerminalInput(e) {
   body.appendChild(out);
   body.appendChild(document.createElement('br'));
 
+  // Remove old input's ID to avoid duplicates
+  input.removeAttribute('id');
   // Recreate input
   const newInput = document.createElement('span');
   newInput.innerHTML = '<span class="prompt">kernel&gt;</span> <span class="cmd"><input type="text" id="terminalInput" style="background:none;border:none;color:var(--ink);font-family:GeistMono,monospace;font-size:0.78rem;outline:none;width:200px" onkeydown="handleTerminalInput(event)"></span>';
@@ -1883,12 +1925,9 @@ document.addEventListener('keydown', (e) => {
 // INIT
 // =============================================
 renderStoreApps();
+// Initialize browser history with default URL
+addToBrowserHistory('https://huhubasic.github.io/Basic-OS');
 openWindow('browser');
-
-// Show update notification after 10 seconds
-setTimeout(() => {
-  document.getElementById('trayUpdate').style.display = 'flex';
-}, 10000);
 </script>
 
 </body>
