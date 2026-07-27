@@ -687,6 +687,62 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
+/* ===== VM Window ===== */
+.vm-container {
+  flex: 1; background: #000; display: flex; flex-direction: column;
+  position: relative; overflow: hidden;
+}
+.vm-screen {
+  flex: 1; position: relative; background: #000;
+  display: flex; align-items: center; justify-content: center;
+}
+.vm-screen canvas { display: none; }
+.vm-screen .vm-boot-text {
+  font-family: 'GeistMono', monospace; font-size: 0.78rem;
+  color: var(--accent2); text-align: center;
+}
+.vm-screen .vm-boot-text .vm-loading-bar {
+  display: inline-block; width: 200px; height: 3px;
+  background: var(--bg3); border-radius: 2px; margin-top: 8px;
+  overflow: hidden; vertical-align: middle;
+}
+.vm-screen .vm-boot-text .vm-loading-bar .bar {
+  height: 100%; background: var(--accent2); border-radius: 2px;
+  width: 0%; animation: vmLoading 2s ease-in-out infinite;
+}
+@keyframes vmLoading {
+  0% { width: 0%; }
+  50% { width: 70%; }
+  100% { width: 100%; }
+}
+.vm-toolbar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; background: var(--win-hdr);
+  border-bottom: 1px solid var(--rule);
+}
+.vm-toolbar .vm-status {
+  flex: 1; font-size: 0.7rem; font-family: 'GeistMono', monospace;
+  display: flex; align-items: center; gap: 6px;
+}
+.vm-status-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--muted); display: inline-block;
+}
+.vm-status-dot.running { background: var(--accent2); animation: pulse 2s infinite; }
+.vm-status-dot.stopped { background: var(--red); }
+.vm-status-dot.saving { background: var(--warn); }
+.vm-toolbar button {
+  padding: 4px 12px; border-radius: 4px; border: 1px solid var(--rule);
+  background: var(--bg3); color: var(--ink); cursor: pointer;
+  font-size: 0.7rem; font-family: 'Bricolage','Noto Sans CJK SC',sans-serif;
+  transition: all 0.15s;
+}
+.vm-toolbar button:hover { background: var(--bg2); border-color: var(--muted); }
+.vm-toolbar button.primary { background: var(--accent2); color: #0d1117; border-color: var(--accent2); }
+.vm-toolbar button.primary:hover { background: #2ea043; }
+.vm-toolbar button.danger { background: var(--red); color: #fff; border-color: var(--red); }
+.vm-toolbar button.danger:hover { background: #d63a31; }
+
 /* ===== Responsive ===== */
 @media (max-width: 768px) {
   .window { width: 100% !important; left: 0 !important; border-radius: 0; }
@@ -732,6 +788,10 @@ body {
       <div class="icon-img icon-settings">🔄</div>
       <span class="icon-label">Upgrade</span>
     </div>
+    <div class="desk-icon" onclick="openWindow('vm')" data-app="vm">
+      <div class="icon-img icon-terminal">🖥️</div>
+      <span class="icon-label">虚拟机</span>
+    </div>
   </div>
 </div>
 
@@ -771,6 +831,10 @@ body {
     <div class="start-app" onclick="openWindow('upgrade');toggleStartMenu()" data-name="Upgrade">
       <span class="start-app-icon">🔄</span>
       <span class="start-app-name">Upgrade</span>
+    </div>
+    <div class="start-app" onclick="openWindow('vm');toggleStartMenu()" data-name="VM">
+      <span class="start-app-icon">🖥️</span>
+      <span class="start-app-name">虚拟机</span>
     </div>
     <div class="start-app" onclick="openWindow('files');toggleStartMenu()" data-name="Files">
       <span class="start-app-icon">📁</span>
@@ -997,7 +1061,7 @@ body {
         </div>
         <div class="settings-group">
           <h4>数据</h4>
-          <button class="settings-btn danger" style="margin-top:8px" onclick="showToast('缓存已清除','success')">清除缓存</button>
+          <button class="settings-btn danger" style="margin-top:8px" onclick="clearAllData()">清除缓存</button>
         </div>
       </div>
       <!-- About -->
@@ -1206,54 +1270,224 @@ body {
   </div>
 </div>
 
+<!-- ============================================= -->
+<!-- ===== VIRTUAL MACHINE WINDOW ===== -->
+<!-- ============================================= -->
+<div class="window" id="win-vm" style="top:40px;left:80px;width:820px;height:600px;resize:both;" data-app="vm">
+  <div class="win-titlebar" onmousedown="startDrag(event, 'win-vm')">
+    <span class="win-icon">🖥️</span>
+    <span class="win-title">虚拟机 — <span id="vmTitleId">未启动</span></span>
+    <div class="win-ctrl">
+      <button onclick="minimizeWindow('win-vm')">—</button>
+      <button onclick="maximizeWindow('win-vm')">□</button>
+      <button class="win-close" onclick="closeVmWindow()">✕</button>
+    </div>
+  </div>
+  <div class="vm-toolbar" id="vmToolbar">
+    <span class="vm-status">
+      <span class="vm-status-dot stopped" id="vmStatusDot"></span>
+      <span id="vmStatusText">已停止</span>
+    </span>
+    <button class="primary" id="vmStartBtn" onclick="startVM()">▶ 启动</button>
+    <button id="vmStopBtn" onclick="stopVM()" style="display:none">⏹ 停止</button>
+    <button id="vmSaveBtn" onclick="saveVMSnapshot()" style="display:none">💾 保存快照</button>
+    <button class="danger" id="vmResetBtn" onclick="resetVM()" style="display:none">🔄 重置</button>
+  </div>
+  <div class="vm-container">
+    <div class="vm-screen" id="vmScreen">
+      <div class="vm-boot-text" id="vmBootText">
+        <div style="font-size:2rem;margin-bottom:8px">🖥️</div>
+        <div>Basic OS 虚拟机</div>
+        <div style="font-size:0.65rem;color:var(--muted);margin-top:8px">点击"启动"来开启你的虚拟机</div>
+        <div style="font-size:0.65rem;color:var(--muted);margin-top:4px">💡 每人拥有独立的永久虚拟机</div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ===== FILES WINDOW ===== -->
-<div class="window" id="win-files" style="top:90px;left:180px;width:600px;height:420px;" data-app="files">
+<div class="window" id="win-files" style="top:90px;left:180px;width:650px;height:480px;" data-app="files">
   <div class="win-titlebar" onmousedown="startDrag(event, 'win-files')">
     <span class="win-icon">📁</span>
-    <span class="win-title">文件管理器</span>
+    <span class="win-title">文件管理器 — VM: <span id="filesVmId"></span></span>
     <div class="win-ctrl">
       <button onclick="minimizeWindow('win-files')">—</button>
       <button onclick="maximizeWindow('win-files')">□</button>
       <button class="win-close" onclick="closeWindow('win-files')">✕</button>
     </div>
   </div>
-  <div class="win-body" style="padding:20px">
-    <div style="display:flex;gap:12px;flex-wrap:wrap">
-      <div style="background:var(--bg3);border-radius:8px;padding:16px;text-align:center;width:100px;cursor:pointer" onclick="showToast('下载页面已打开','info')">
-        <div style="font-size:1.5rem">📥</div>
-        <div style="font-size:0.7rem;margin-top:4px">Downloads</div>
-      </div>
-      <div style="background:var(--bg3);border-radius:8px;padding:16px;text-align:center;width:100px;cursor:pointer" onclick="showToast('文档为空','info')">
-        <div style="font-size:1.5rem">📄</div>
-        <div style="font-size:0.7rem;margin-top:4px">Documents</div>
-      </div>
-      <div style="background:var(--bg3);border-radius:8px;padding:16px;text-align:center;width:100px;cursor:pointer" onclick="showToast('图片为空','info')">
-        <div style="font-size:1.5rem">🖼️</div>
-        <div style="font-size:0.7rem;margin-top:4px">Pictures</div>
-      </div>
-      <div style="background:var(--bg3);border-radius:8px;padding:16px;text-align:center;width:100px;cursor:pointer" onclick="showToast('音乐为空','info')">
-        <div style="font-size:1.5rem">🎵</div>
-        <div style="font-size:0.7rem;margin-top:4px">Music</div>
-      </div>
+  <div class="win-body" style="flex-direction:column">
+    <!-- Upload area -->
+    <div style="padding:12px 20px;border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <label for="fileUploadInput" style="display:flex;align-items:center;gap:6px;padding:8px 16px;background:var(--accent);color:#fff;border-radius:6px;cursor:pointer;font-size:0.8rem;font-family:'Bricolage','Noto Sans CJK SC',sans-serif;transition:background 0.15s" onmouseover="this.style.background='#4090e0'" onmouseout="this.style.background='var(--accent)'">
+        📤 上传文件
+      </label>
+      <input type="file" id="fileUploadInput" multiple style="display:none" onchange="handleFileUpload(this.files)">
+      <span style="font-size:0.7rem;color:var(--muted)">支持任意文件，数据存储在本地浏览器</span>
+      <button onclick="refreshFileList()" style="background:var(--bg3);border:1px solid var(--rule);color:var(--ink);border-radius:6px;padding:6px 12px;cursor:pointer;font-size:0.78rem;font-family:'Bricolage','Noto Sans CJK SC',sans-serif">🔄 刷新</button>
     </div>
-    <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--rule)">
-      <h4 style="font-size:0.82rem;margin-bottom:8px">💿 ISO 镜像文件</h4>
-      <div style="display:flex;flex-direction:column;gap:6px">
-        <a href="basic-os-32.iso" download style="color:var(--accent);text-decoration:none;font-size:0.78rem;display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='none'">💾 basic-os-32.iso <span style="color:var(--muted);font-size:0.65rem">5.0 MB</span></a>
-        <a href="basic-os-64.iso" download style="color:var(--accent);text-decoration:none;font-size:0.78rem;display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='none'">⚡ basic-os-64.iso <span style="color:var(--muted);font-size:0.65rem">5.0 MB</span></a>
-        <a href="basic-os-64-32.iso" download style="color:var(--accent);text-decoration:none;font-size:0.78rem;display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:4px" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='none'">🔰 basic-os-64-32.iso <span style="color:var(--muted);font-size:0.65rem">5.0 MB</span></a>
-      </div>
+    <!-- File list -->
+    <div style="flex:1;overflow:auto;padding:12px 20px" id="filesListContainer">
+      <div style="text-align:center;padding:40px;color:var(--muted)">📂 加载中...</div>
+    </div>
+    <!-- Bottom bar -->
+    <div style="padding:10px 20px;border-top:1px solid var(--rule);display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:0.7rem;color:var(--muted)" id="filesCount">0 个文件</span>
+      <span style="font-size:0.65rem;color:var(--muted)">💡 文件永久保存在你的浏览器中</span>
+      <button onclick="clearAllFilesFromDB()" style="background:var(--red);border:none;color:#fff;border-radius:4px;padding:4px 12px;cursor:pointer;font-size:0.7rem;font-family:'Bricolage','Noto Sans CJK SC',sans-serif">🗑 清空全部</button>
     </div>
   </div>
 </div>
 
+<script src="https://copy.sh/v86/libv86.js"></script>
 <script>
+// =============================================
+// PERSISTENCE LAYER (localStorage + IndexedDB)
+// =============================================
+const STORAGE_KEY = 'basic-os-state';
+const DB_NAME = 'BasicOSFiles';
+const DB_VERSION = 1;
+
+// -- VM Identity --
+function getVMId() {
+  let vmId = localStorage.getItem('basic-os-vm-id');
+  if (!vmId) {
+    vmId = 'VM-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 8).toUpperCase();
+    localStorage.setItem('basic-os-vm-id', vmId);
+  }
+  return vmId;
+}
+
+// -- System State --
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return null;
+}
+
+function saveState(state) {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch(e) {
+    showToast('存储空间不足，请清理数据', 'warning');
+  }
+}
+
+function getDefaultState() {
+  return {
+    version: '2.0',
+    updateInstalled: false,
+    installedApps: ['calc', 'guess'],
+    settings: {
+      wallpaper: 'default',
+      darkMode: true,
+      transparency: true,
+      animations: true,
+      scale: '100%'
+    },
+    userName: 'HuBasic',
+    vmId: getVMId(),
+    lastUpdated: Date.now()
+  };
+}
+
+let systemState = loadState() || getDefaultState();
+if (!systemState.vmId) systemState.vmId = getVMId();
+saveState(systemState);
+
+// -- IndexedDB for File Storage --
+let db = null;
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('files')) {
+        const store = db.createObjectStore('files', { keyPath: 'id', autoIncrement: true });
+        store.createIndex('name', 'name', { unique: false });
+        store.createIndex('folder', 'folder', { unique: false });
+      }
+    };
+    req.onsuccess = (e) => { db = e.target.result; resolve(db); };
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+function saveFileToDB(fileData) {
+  return new Promise((resolve, reject) => {
+    if (!db) { reject(new Error('DB not open')); return; }
+    const tx = db.transaction('files', 'readwrite');
+    const store = tx.objectStore('files');
+    const req = store.add(fileData);
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+function getAllFiles() {
+  return new Promise((resolve, reject) => {
+    if (!db) { reject(new Error('DB not open')); return; }
+    const tx = db.transaction('files', 'readonly');
+    const store = tx.objectStore('files');
+    const req = store.getAll();
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+function deleteFileFromDB(id) {
+  return new Promise((resolve, reject) => {
+    if (!db) { reject(new Error('DB not open')); return; }
+    const tx = db.transaction('files', 'readwrite');
+    const store = tx.objectStore('files');
+    const req = store.delete(id);
+    req.onsuccess = () => resolve();
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+function clearAllFiles() {
+  return new Promise((resolve, reject) => {
+    if (!db) { reject(new Error('DB not open')); return; }
+    const tx = db.transaction('files', 'readwrite');
+    const store = tx.objectStore('files');
+    const req = store.clear();
+    req.onsuccess = () => resolve();
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+// Initialize DB
+openDB().catch(e => console.warn('IndexedDB not available:', e));
+
+// -- Apply saved settings --
+function applySavedSettings() {
+  if (systemState.settings.wallpaper !== 'default') {
+    changeWallpaper(systemState.settings.wallpaper);
+  }
+  if (systemState.updateInstalled) {
+    document.getElementById('trayVersion').textContent = 'v' + systemState.version;
+    document.getElementById('trayUpdate').style.display = 'none';
+  }
+  // Update user name in start menu
+  const userSpan = document.querySelector('.start-menu-user span');
+  if (userSpan) userSpan.textContent = systemState.userName;
+}
+
 // =============================================
 // BOOT SCREEN
 // =============================================
 setTimeout(() => {
   document.getElementById('bootScreen').classList.add('hidden');
-  setTimeout(() => { document.getElementById('bootScreen').style.display = 'none'; }, 500);
+  setTimeout(() => {
+    document.getElementById('bootScreen').style.display = 'none';
+    applySavedSettings();
+    // Show welcome message with VM info
+    const vmId = systemState.vmId;
+    showToast('🖥️ 虚拟机 ' + vmId + ' 已就绪 | 用户: ' + systemState.userName, 'info');
+  }, 500);
 }, 2800);
 
 // =============================================
@@ -1284,6 +1518,11 @@ function openWindow(app) {
   openWindows[app] = true;
   updateTaskbar();
   updateDesktopIcons();
+
+  // Refresh file list when opening files window
+  if (app === 'files') {
+    refreshFileList();
+  }
 }
 
 function closeWindow(winId) {
@@ -1337,7 +1576,8 @@ function updateTaskbar() {
     { id: 'store', icon: '🛒', name: 'Store' },
     { id: 'terminal', icon: '⬛', name: 'Terminal' },
     { id: 'upgrade', icon: '🔄', name: 'Upgrade' },
-    { id: 'files', icon: '📁', name: 'Files' }
+    { id: 'files', icon: '📁', name: 'Files' },
+    { id: 'vm', icon: '🖥️', name: '虚拟机' }
   ];
   container.innerHTML = '';
   apps.forEach(a => {
@@ -1488,6 +1728,7 @@ function checkUpdate() {
   status.style.display = 'block';
   status.textContent = '正在连接更新服务器...';
   status.style.color = 'var(--muted)';
+  installBtn.style.display = 'none';
 
   let w = 0;
   const interval = setInterval(() => {
@@ -1496,12 +1737,20 @@ function checkUpdate() {
       w = 100;
       clearInterval(interval);
       bar.style.width = '100%';
-      status.textContent = '✅ 发现新版本 Basic OS v2.0.1 — 包含性能优化和 Bug 修复';
-      status.style.color = 'var(--accent2)';
-      installBtn.style.display = 'inline-block';
       btn.textContent = '重新检查';
       btn.disabled = false;
-      document.getElementById('trayUpdate').style.display = 'flex';
+      // Check if already updated
+      if (systemState.updateInstalled) {
+        status.textContent = '✅ 您的系统已是最新版本 Basic OS v' + systemState.version;
+        status.style.color = 'var(--accent2)';
+        document.getElementById('trayUpdate').style.display = 'none';
+        installBtn.style.display = 'none';
+      } else {
+        status.textContent = '✅ 发现新版本 Basic OS v2.0.1 — 包含性能优化和 Bug 修复';
+        status.style.color = 'var(--accent2)';
+        installBtn.style.display = 'inline-block';
+        document.getElementById('trayUpdate').style.display = 'flex';
+      }
     } else {
       bar.style.width = w + '%';
       status.textContent = '正在检查更新... ' + Math.round(w) + '%';
@@ -1533,17 +1782,30 @@ function installUpdate() {
       installBtn.textContent = '立即重启';
       installBtn.disabled = false;
       installBtn.onclick = () => {
+        // Save update state persistently
+        systemState.version = '2.0.1';
+        systemState.updateInstalled = true;
+        systemState.lastUpdated = Date.now();
+        saveState(systemState);
+        // Reboot animation
         document.getElementById('bootScreen').style.display = 'flex';
         document.getElementById('bootScreen').classList.remove('hidden');
+        document.querySelector('.boot-subtitle').textContent = 'Basic OS v2.0.1 — 正在应用更新...';
         document.querySelector('.boot-loading .bar').style.animation = 'none';
         document.querySelector('.boot-loading .bar').offsetHeight;
         document.querySelector('.boot-loading .bar').style.animation = 'bootLoad 2.5s ease-in-out forwards';
         setTimeout(() => {
           document.getElementById('bootScreen').classList.add('hidden');
-          setTimeout(() => { document.getElementById('bootScreen').style.display = 'none'; }, 500);
+          setTimeout(() => {
+            document.getElementById('bootScreen').style.display = 'none';
+            document.querySelector('.boot-subtitle').textContent = 'Basic OS v2.0 — 正在启动...';
+          }, 500);
           document.getElementById('trayVersion').textContent = 'v2.0.1';
           document.getElementById('trayUpdate').style.display = 'none';
           installBtn.style.display = 'none';
+          // Update settings display
+          const verBadges = document.querySelectorAll('.version-badge');
+          verBadges.forEach(b => b.textContent = 'Basic OS v2.0.1');
           showToast('系统已更新到 v2.0.1', 'success');
         }, 2800);
       };
@@ -1554,6 +1816,12 @@ function installUpdate() {
       else status.textContent = '正在配置系统... ' + Math.round(w) + '%';
     }
   }, 150);
+}
+
+// On load: if already updated, show current version
+if (systemState.updateInstalled) {
+  document.getElementById('trayVersion').textContent = 'v' + systemState.version;
+  document.getElementById('trayUpdate').style.display = 'none';
 }
 
 // =============================================
@@ -1655,32 +1923,43 @@ function refreshBrowser() {
 // APP STORE
 // =============================================
 const storeApps = [
-  { id: 'calc', name: 'Calculator', icon: '🧮', iconBg: 'linear-gradient(135deg,#6c5ce7,#a29bfe)', desc: '功能强大的科学计算器，支持基本运算和科学函数', dev: 'Basic Team', rating: '★★★★☆', category: 'tools', price: '免费', installed: true },
-  { id: 'guess', name: 'Guess Game', icon: '🎯', iconBg: 'linear-gradient(135deg,#e17055,#d63031)', desc: '经典的猜数字游戏，测试你的运气和推理能力', dev: 'Basic Team', rating: '★★★★★', category: 'games', price: '免费', installed: true },
-  { id: 'monitor', name: 'System Monitor', icon: '📊', iconBg: 'linear-gradient(135deg,#00cec9,#0984e3)', desc: '实时监控系统资源使用情况，CPU、内存、网络一应俱全', dev: 'Basic Team', rating: '★★★★☆', category: 'tools', price: '免费', installed: false },
-  { id: 'ascii', name: 'ASCII Art', icon: '🎨', iconBg: 'linear-gradient(135deg,#fdcb6e,#e17055)', desc: 'ASCII 艺术画廊，将图片转换为字符画，支持多种风格', dev: 'Basic Team', rating: '★★★☆☆', category: 'media', price: '免费', installed: false },
-  { id: 'editor', name: 'Text Editor', icon: '📝', iconBg: 'linear-gradient(135deg,#636e72,#2d3436)', desc: '轻量级文本编辑器，支持语法高亮和多标签页', dev: 'Community', rating: '★★★★☆', category: 'dev', price: '免费', installed: false },
-  { id: 'snake', name: 'Snake Game', icon: '🐍', iconBg: 'linear-gradient(135deg,#3fb950,#2ea043)', desc: '经典贪吃蛇游戏，重温童年回忆', dev: 'Community', rating: '★★★★★', category: 'games', price: '免费', installed: false },
-  { id: 'paint', name: 'Pixel Paint', icon: '🖌️', iconBg: 'linear-gradient(135deg,#a371f7,#6c5ce7)', desc: '像素画编辑器，发挥你的创意', dev: 'Community', rating: '★★★☆☆', category: 'media', price: '免费', installed: false },
-  { id: 'notes', name: 'Notes', icon: '📋', iconBg: 'linear-gradient(135deg,#d29922,#e17055)', desc: '简洁的笔记应用，支持 Markdown 格式', dev: 'Community', rating: '★★★★☆', category: 'tools', price: '免费', installed: false },
+  { id: 'calc', name: 'Calculator', icon: '🧮', iconBg: 'linear-gradient(135deg,#6c5ce7,#a29bfe)', desc: '功能强大的科学计算器，支持基本运算和科学函数', dev: 'Basic Team', rating: '★★★★☆', category: 'tools', price: '免费' },
+  { id: 'guess', name: 'Guess Game', icon: '🎯', iconBg: 'linear-gradient(135deg,#e17055,#d63031)', desc: '经典的猜数字游戏，测试你的运气和推理能力', dev: 'Basic Team', rating: '★★★★★', category: 'games', price: '免费' },
+  { id: 'monitor', name: 'System Monitor', icon: '📊', iconBg: 'linear-gradient(135deg,#00cec9,#0984e3)', desc: '实时监控系统资源使用情况，CPU、内存、网络一应俱全', dev: 'Basic Team', rating: '★★★★☆', category: 'tools', price: '免费' },
+  { id: 'ascii', name: 'ASCII Art', icon: '🎨', iconBg: 'linear-gradient(135deg,#fdcb6e,#e17055)', desc: 'ASCII 艺术画廊，将图片转换为字符画，支持多种风格', dev: 'Basic Team', rating: '★★★☆☆', category: 'media', price: '免费' },
+  { id: 'editor', name: 'Text Editor', icon: '📝', iconBg: 'linear-gradient(135deg,#636e72,#2d3436)', desc: '轻量级文本编辑器，支持语法高亮和多标签页', dev: 'Community', rating: '★★★★☆', category: 'dev', price: '免费' },
+  { id: 'snake', name: 'Snake Game', icon: '🐍', iconBg: 'linear-gradient(135deg,#3fb950,#2ea043)', desc: '经典贪吃蛇游戏，重温童年回忆', dev: 'Community', rating: '★★★★★', category: 'games', price: '免费' },
+  { id: 'paint', name: 'Pixel Paint', icon: '🖌️', iconBg: 'linear-gradient(135deg,#a371f7,#6c5ce7)', desc: '像素画编辑器，发挥你的创意', dev: 'Community', rating: '★★★☆☆', category: 'media', price: '免费' },
+  { id: 'notes', name: 'Notes', icon: '📋', iconBg: 'linear-gradient(135deg,#d29922,#e17055)', desc: '简洁的笔记应用，支持 Markdown 格式', dev: 'Community', rating: '★★★★☆', category: 'tools', price: '免费' },
 ];
+
+// Dynamically compute installed state from localStorage
+function isAppInstalled(appId) {
+  return systemState.installedApps.includes(appId);
+}
+
+function getStoreAppWithState(app) {
+  return { ...app, installed: isAppInstalled(app.id) };
+}
 
 function renderStoreApps(filter = '') {
   const grid = document.getElementById('storeGrid');
   const q = filter.toLowerCase();
   grid.innerHTML = storeApps
     .filter(a => a.name.toLowerCase().includes(q) || a.desc.toLowerCase().includes(q))
-    .map(a => `
+    .map(a => {
+      const installed = isAppInstalled(a.id);
+      return `
       <div class="store-app-card" onclick="showAppDetail('${a.id}')">
         <div class="app-icon" style="background:${a.iconBg}">${a.icon}</div>
         <div class="app-name">${a.name}</div>
         <div class="app-desc">${a.desc}</div>
         <div class="app-meta">
           <span class="app-rating">${a.rating}</span>
-          ${a.installed ? '<span class="app-installed">✓ 已安装</span>' : '<span class="app-price">' + a.price + '</span>'}
+          ${installed ? '<span class="app-installed">✓ 已安装</span>' : '<span class="app-price">' + a.price + '</span>'}
         </div>
       </div>
-    `).join('');
+    `}).join('');
 }
 
 function filterStoreApps() {
@@ -1690,6 +1969,7 @@ function filterStoreApps() {
 function showAppDetail(appId) {
   const app = storeApps.find(a => a.id === appId);
   if (!app) return;
+  const installed = isAppInstalled(app.id);
   document.getElementById('storeBrowse').style.display = 'none';
   document.getElementById('storeDetail').classList.add('show');
   document.getElementById('storeDetailHero').innerHTML = `
@@ -1700,8 +1980,8 @@ function showAppDetail(appId) {
       <div class="desc">${app.desc}</div>
     </div>
   `;
-  document.getElementById('storeDetailActions').innerHTML = app.installed
-    ? '<button class="store-install-btn installed">✓ 已安装</button><button class="upgrade-btn secondary" onclick="showToast(\'应用已卸载\',\'info\')">卸载</button>'
+  document.getElementById('storeDetailActions').innerHTML = installed
+    ? '<button class="store-install-btn installed">✓ 已安装</button><button class="upgrade-btn secondary" onclick="uninstallApp(\'' + app.id + '\')">卸载</button>'
     : '<button class="store-install-btn" onclick="installApp(\'' + app.id + '\')">安装</button>';
 }
 
@@ -1713,13 +1993,29 @@ function showStoreBrowse() {
 function installApp(appId) {
   const app = storeApps.find(a => a.id === appId);
   if (!app) return;
+  if (isAppInstalled(appId)) {
+    showToast(app.name + ' 已经安装', 'info');
+    return;
+  }
   showToast('正在安装 ' + app.name + '...', 'info');
   setTimeout(() => {
-    app.installed = true;
+    systemState.installedApps.push(appId);
+    saveState(systemState);
     renderStoreApps(document.getElementById('storeSearch').value);
     showAppDetail(appId);
     showToast(app.name + ' 安装成功！', 'success');
+    updateDesktopIcons();
   }, 1500);
+}
+
+function uninstallApp(appId) {
+  const app = storeApps.find(a => a.id === appId);
+  if (!app) return;
+  systemState.installedApps = systemState.installedApps.filter(id => id !== appId);
+  saveState(systemState);
+  renderStoreApps(document.getElementById('storeSearch').value);
+  showAppDetail(appId);
+  showToast(app.name + ' 已卸载', 'info');
 }
 
 function switchStoreTab(el, tab) {
@@ -1731,14 +2027,14 @@ function switchStoreTab(el, tab) {
   document.getElementById('storeSubmitSuccess').classList.remove('show');
   if (tab === 'browse') {
     document.getElementById('storeBrowse').style.display = '';
+    document.getElementById('storeSearch').value = '';
+    renderStoreApps('');
   } else if (tab === 'installed') {
     document.getElementById('storeBrowse').style.display = '';
     document.getElementById('storeSearch').value = '';
-    renderStoreApps('');
-    // Filter only installed
     const grid = document.getElementById('storeGrid');
     grid.innerHTML = storeApps
-      .filter(a => a.installed)
+      .filter(a => isAppInstalled(a.id))
       .map(a => `
         <div class="store-app-card" onclick="showAppDetail('${a.id}')">
           <div class="app-icon" style="background:${a.iconBg}">${a.icon}</div>
@@ -1750,6 +2046,9 @@ function switchStoreTab(el, tab) {
           </div>
         </div>
       `).join('');
+    if (grid.innerHTML === '') {
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--muted)">📦 暂无已安装应用<br><span style="font-size:0.72rem">去浏览标签页发现更多应用</span></div>';
+    }
   } else if (tab === 'submit') {
     document.getElementById('storeSubmit').classList.add('show');
   }
@@ -1815,7 +2114,7 @@ function handleTerminalInput(e) {
   out.className = 'output';
 
   if (cmd === 'help') {
-    out.innerHTML = '可用命令: help, clear, echo, time, mem, version, apps, install, run, uninstall, desktop, settings, store, upgrade, browser, about, shutdown<br>';
+    out.innerHTML = '可用命令: help, clear, echo, time, mem, version, apps, install, run, uninstall, desktop, settings, store, upgrade, browser, vm, vm start, vm stop, vm save, vm reset, about, shutdown<br>';
   } else if (cmd === 'clear') {
     body.innerHTML = '<span class="prompt">kernel&gt;</span> <span class="cmd"><input type="text" class="term-input" style="background:none;border:none;color:var(--ink);font-family:GeistMono,monospace;font-size:0.78rem;outline:none;width:200px" onkeydown="handleTerminalInput(event)"></span>';
     body.querySelector('.term-input').focus();
@@ -1823,11 +2122,17 @@ function handleTerminalInput(e) {
   } else if (cmd === 'time') {
     out.innerHTML = '系统时间: ' + new Date().toLocaleString('zh-CN') + '<br>';
   } else if (cmd === 'version') {
-    out.innerHTML = 'Basic OS v2.0 — kernel-2.0.0-x86_64<br>';
+    out.innerHTML = 'Basic OS v' + systemState.version + ' — kernel-2.0.0-x86_64<br>VM ID: ' + systemState.vmId + '<br>';
   } else if (cmd === 'mem') {
     out.innerHTML = '内存使用: 45 MB / 256 MB (17.6%)<br>堆空间: 4 MB, 空闲: 3.2 MB<br>';
   } else if (cmd === 'apps') {
-    out.innerHTML = '  calculator     🧮 科学计算器          [已安装]<br>  guess          🎯 猜数字游戏          [已安装]<br>  monitor        📊 系统监控面板        [未安装]<br>  ascii          🎨 ASCII 艺术画廊      [未安装]<br>  editor         📝 文本编辑器          [未安装]<br>  snake          🐍 贪吃蛇游戏          [未安装]<br>';
+    const installed = systemState.installedApps;
+    let appList = '';
+    storeApps.forEach(a => {
+      const isInst = installed.includes(a.id);
+      appList += `  ${a.id.padEnd(15)} ${a.icon} ${a.name.padEnd(12)} [${isInst ? '已安装' : '未安装'}]<br>`;
+    });
+    out.innerHTML = appList || '  暂无应用<br>';
   } else if (cmd === 'desktop') {
     out.innerHTML = '桌面环境已激活 ✓<br>';
   } else if (cmd === 'settings') {
@@ -1847,6 +2152,18 @@ function handleTerminalInput(e) {
   } else if (cmd === 'shutdown') {
     out.innerHTML = '系统正在关闭...<br>';
     setTimeout(() => showShutdown(), 500);
+  } else if (cmd === 'vm' || cmd === 'vm start') {
+    openWindow('vm');
+    out.innerHTML = '正在打开虚拟机...<br>';
+  } else if (cmd === 'vm stop') {
+    stopVM();
+    out.innerHTML = '虚拟机已停止<br>';
+  } else if (cmd === 'vm save') {
+    saveVMSnapshot();
+    out.innerHTML = '正在保存虚拟机快照...<br>';
+  } else if (cmd === 'vm reset') {
+    resetVM();
+    out.innerHTML = '正在重置虚拟机...<br>';
   } else if (cmd.startsWith('echo ')) {
     out.innerHTML = cmd.substring(5) + '<br>';
   } else if (cmd.startsWith('install ')) {
@@ -1891,6 +2208,35 @@ function showShutdown() {
 }
 
 // =============================================
+// CLEAR DATA
+// =============================================
+async function clearAllData() {
+  if (!confirm('确定要清除所有数据吗？这将删除所有文件、已安装应用、虚拟机状态和系统设置。此操作不可恢复！')) return;
+  try {
+    if (vmEmulator) { try { vmEmulator.stop(); } catch(e){} vmEmulator = null; }
+    if (vmAutoSaveInterval) { clearInterval(vmAutoSaveInterval); vmAutoSaveInterval = null; }
+    await clearAllFiles();
+    await deleteVMStateFromDB().catch(() => {});
+    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem('basic-os-vm-id');
+    showToast('所有数据已清除，即将刷新页面...', 'success');
+    setTimeout(() => location.reload(), 1500);
+  } catch(e) {
+    showToast('清除失败', 'warning');
+  }
+}
+
+// Auto-save VM on page unload
+window.addEventListener('beforeunload', () => {
+  if (vmEmulator && vmRunning) {
+    try {
+      const state = vmEmulator.save_state();
+      // Synchronous fallback — won't complete but best effort
+    } catch(e) {}
+  }
+});
+
+// =============================================
 // WALLPAPER
 // =============================================
 function changeWallpaper(type) {
@@ -1902,8 +2248,175 @@ function changeWallpaper(type) {
   } else {
     desktop.style.background = 'linear-gradient(180deg, #0a1628 0%, #0d1a2d 30%, #0f1f35 60%, #0a1628 100%)';
   }
+  // Save wallpaper setting
+  systemState.settings.wallpaper = type;
+  saveState(systemState);
   showToast('桌面背景已更新', 'success');
 }
+
+// =============================================
+// FILE MANAGEMENT (IndexedDB)
+// =============================================
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+function getFileIcon(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  const iconMap = {
+    'pdf': '📕', 'doc': '📘', 'docx': '📘', 'xls': '📗', 'xlsx': '📗',
+    'ppt': '📙', 'pptx': '📙', 'txt': '📄', 'md': '📝', 'json': '📋',
+    'js': '💛', 'ts': '💙', 'html': '🌐', 'css': '🎨', 'py': '🐍',
+    'c': '⚙️', 'cpp': '⚙️', 'java': '☕', 'rs': '🦀', 'go': '🔵',
+    'png': '🖼️', 'jpg': '🖼️', 'jpeg': '🖼️', 'gif': '🖼️', 'svg': '🖼️',
+    'webp': '🖼️', 'bmp': '🖼️', 'ico': '🖼️',
+    'mp3': '🎵', 'wav': '🎵', 'ogg': '🎵', 'flac': '🎵',
+    'mp4': '🎬', 'avi': '🎬', 'mov': '🎬', 'webm': '🎬',
+    'zip': '📦', 'rar': '📦', '7z': '📦', 'tar': '📦', 'gz': '📦',
+    'iso': '💿', 'img': '💿', 'sh': '💻', 'exe': '⚡', 'apk': '📱',
+    'ttf': '🔤', 'otf': '🔤', 'woff': '🔤', 'woff2': '🔤',
+  };
+  return iconMap[ext] || '📎';
+}
+
+async function handleFileUpload(files) {
+  if (!db) {
+    showToast('浏览器不支持本地存储，请使用现代浏览器', 'warning');
+    return;
+  }
+  if (!files || files.length === 0) return;
+
+  let uploaded = 0;
+  let failed = 0;
+  const totalSize = Array.from(files).reduce((s, f) => s + f.size, 0);
+
+  showToast(`正在上传 ${files.length} 个文件 (${formatFileSize(totalSize)})...`, 'info');
+
+  for (const file of files) {
+    try {
+      const fileData = {
+        name: file.name,
+        size: file.size,
+        type: file.type || 'application/octet-stream',
+        folder: 'root',
+        uploadedAt: Date.now(),
+        data: await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsArrayBuffer(file);
+        })
+      };
+      await saveFileToDB(fileData);
+      uploaded++;
+    } catch(e) {
+      failed++;
+      console.error('Failed to save file:', file.name, e);
+    }
+  }
+
+  if (uploaded > 0) {
+    showToast(`✅ ${uploaded} 个文件上传成功` + (failed > 0 ? `，${failed} 个失败` : ''), 'success');
+    await refreshFileList();
+  } else {
+    showToast('文件上传失败', 'warning');
+  }
+
+  // Clear the input
+  document.getElementById('fileUploadInput').value = '';
+}
+
+async function refreshFileList() {
+  const container = document.getElementById('filesListContainer');
+  if (!db) {
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⚠️ 浏览器不支持本地存储</div>';
+    return;
+  }
+
+  try {
+    const files = await getAllFiles();
+    const countEl = document.getElementById('filesCount');
+    countEl.textContent = files.length + ' 个文件';
+
+    if (files.length === 0) {
+      container.innerHTML = `
+        <div style="text-align:center;padding:40px;color:var(--muted)">
+          <div style="font-size:2rem;margin-bottom:8px">📂</div>
+          <div>暂无文件</div>
+          <div style="font-size:0.7rem;margin-top:4px">点击上方"上传文件"按钮添加文件</div>
+          <div style="font-size:0.65rem;color:var(--muted);margin-top:12px">💡 所有文件永久保存在浏览器中，关闭网页不会丢失</div>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = files.map(f => `
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg3);border-radius:6px;margin-bottom:4px;transition:background 0.15s" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='var(--bg3)'">
+        <span style="font-size:1.2rem">${getFileIcon(f.name)}</span>
+        <span style="flex:1;font-size:0.8rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.name}</span>
+        <span style="font-size:0.68rem;color:var(--muted);white-space:nowrap">${formatFileSize(f.size)}</span>
+        <span style="font-size:0.65rem;color:var(--muted);white-space:nowrap">${new Date(f.uploadedAt).toLocaleDateString('zh-CN')}</span>
+        <button onclick="downloadFileFromDB(${f.id})" style="background:var(--accent);border:none;color:#fff;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.68rem;font-family:'Bricolage','Noto Sans CJK SC',sans-serif" title="下载">⬇</button>
+        <button onclick="deleteFileAndRefresh(${f.id},'${f.name.replace(/'/g, "\\'")}')" style="background:var(--red);border:none;color:#fff;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.68rem;font-family:'Bricolage','Noto Sans CJK SC',sans-serif" title="删除">✕</button>
+      </div>
+    `).join('');
+  } catch(e) {
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⚠️ 加载文件列表失败</div>';
+    console.error('refreshFileList error:', e);
+  }
+}
+
+async function downloadFileFromDB(id) {
+  if (!db) return;
+  try {
+    const tx = db.transaction('files', 'readonly');
+    const store = tx.objectStore('files');
+    const req = store.get(id);
+    req.onsuccess = (e) => {
+      const file = e.target.result;
+      if (!file) { showToast('文件不存在', 'warning'); return; }
+      const blob = new Blob([file.data], { type: file.type });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = file.name;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('正在下载: ' + file.name, 'info');
+    };
+    req.onerror = () => showToast('下载失败', 'warning');
+  } catch(e) {
+    showToast('下载失败', 'warning');
+  }
+}
+
+async function deleteFileAndRefresh(id, name) {
+  if (!confirm('确定要删除 "' + name + '" 吗？此操作不可恢复。')) return;
+  try {
+    await deleteFileFromDB(id);
+    showToast('已删除: ' + name, 'info');
+    await refreshFileList();
+  } catch(e) {
+    showToast('删除失败', 'warning');
+  }
+}
+
+async function clearAllFilesFromDB() {
+  if (!confirm('确定要清空所有文件吗？此操作不可恢复！')) return;
+  try {
+    await clearAllFiles();
+    await refreshFileList();
+    showToast('所有文件已清空', 'success');
+  } catch(e) {
+    showToast('清空失败', 'warning');
+  }
+}
+
+// Set VM ID in files window
+document.getElementById('filesVmId').textContent = systemState.vmId;
 
 // =============================================
 // KEYBOARD SHORTCUTS
@@ -1922,11 +2435,311 @@ document.addEventListener('keydown', (e) => {
 });
 
 // =============================================
+// VIRTUAL MACHINE (v86 x86 Emulator)
+// =============================================
+let vmEmulator = null;
+let vmRunning = false;
+let vmAutoSaveInterval = null;
+const VM_AUTO_SAVE_MS = 30000; // Auto-save every 30 seconds
+
+// Add VM state store to IndexedDB
+function ensureVMStore() {
+  return new Promise((resolve, reject) => {
+    if (!db) { reject(new Error('DB not open')); return; }
+    if (db.objectStoreNames.contains('vm_snapshots')) { resolve(); return; }
+    db.close();
+    const req = indexedDB.open(DB_NAME, DB_VERSION + 1);
+    req.onupgradeneeded = (e) => {
+      const upgraded = e.target.result;
+      if (!upgraded.objectStoreNames.contains('vm_snapshots')) {
+        upgraded.createObjectStore('vm_snapshots', { keyPath: 'vmId' });
+      }
+    };
+    req.onsuccess = (e) => {
+      db = e.target.result;
+      resolve();
+    };
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+function saveVMStateToDB(arrayBuffer) {
+  return new Promise((resolve, reject) => {
+    if (!db) { reject(new Error('DB not open')); return; }
+    const tx = db.transaction('vm_snapshots', 'readwrite');
+    const store = tx.objectStore('vm_snapshots');
+    const req = store.put({
+      vmId: systemState.vmId,
+      state: arrayBuffer,
+      savedAt: Date.now(),
+      memorySize: 64,
+      version: systemState.version
+    });
+    req.onsuccess = () => resolve();
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+function loadVMStateFromDB() {
+  return new Promise((resolve, reject) => {
+    if (!db) { reject(new Error('DB not open')); return; }
+    const tx = db.transaction('vm_snapshots', 'readonly');
+    const store = tx.objectStore('vm_snapshots');
+    const req = store.get(systemState.vmId);
+    req.onsuccess = (e) => {
+      const result = e.target.result;
+      resolve(result ? result.state : null);
+    };
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+function deleteVMStateFromDB() {
+  return new Promise((resolve, reject) => {
+    if (!db) { reject(new Error('DB not open')); return; }
+    const tx = db.transaction('vm_snapshots', 'readwrite');
+    const store = tx.objectStore('vm_snapshots');
+    const req = store.delete(systemState.vmId);
+    req.onsuccess = () => resolve();
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+function updateVMStatus(status) {
+  const dot = document.getElementById('vmStatusDot');
+  const text = document.getElementById('vmStatusText');
+  const startBtn = document.getElementById('vmStartBtn');
+  const stopBtn = document.getElementById('vmStopBtn');
+  const saveBtn = document.getElementById('vmSaveBtn');
+  const resetBtn = document.getElementById('vmResetBtn');
+
+  dot.className = 'vm-status-dot';
+  if (status === 'running') {
+    dot.classList.add('running');
+    text.textContent = '运行中';
+    startBtn.style.display = 'none';
+    stopBtn.style.display = '';
+    saveBtn.style.display = '';
+    resetBtn.style.display = '';
+    document.getElementById('vmTitleId').textContent = 'Linux (Buildroot)';
+  } else if (status === 'stopped') {
+    dot.classList.add('stopped');
+    text.textContent = '已停止';
+    startBtn.style.display = '';
+    stopBtn.style.display = 'none';
+    saveBtn.style.display = 'none';
+    resetBtn.style.display = 'none';
+    document.getElementById('vmTitleId').textContent = '未启动';
+  } else if (status === 'saving') {
+    dot.classList.add('saving');
+    text.textContent = '保存中...';
+  }
+}
+
+async function startVM() {
+  if (typeof V86 === 'undefined') {
+    showToast('v86 库加载失败，请刷新页面重试', 'warning');
+    return;
+  }
+
+  updateVMStatus('saving');
+  document.getElementById('vmBootText').innerHTML = `
+    <div style="font-size:2rem;margin-bottom:8px">🖥️</div>
+    <div>正在启动虚拟机...</div>
+    <div class="vm-loading-bar"><div class="bar"></div></div>
+    <div style="font-size:0.65rem;color:var(--muted);margin-top:8px">初始化 x86 模拟器</div>
+  `;
+
+  try {
+    await ensureVMStore();
+
+    // Check for saved state
+    const savedState = await loadVMStateFromDB();
+
+    if (savedState) {
+      document.getElementById('vmBootText').innerHTML = `
+        <div style="font-size:2rem;margin-bottom:8px">🖥️</div>
+        <div>正在恢复虚拟机快照...</div>
+        <div class="vm-loading-bar"><div class="bar"></div></div>
+        <div style="font-size:0.65rem;color:var(--muted);margin-top:8px">加载已保存的状态</div>
+      `;
+    }
+
+    // Create v86 instance
+    const screenContainer = document.getElementById('vmScreen');
+    // Clear previous canvas if any
+    const existingCanvas = screenContainer.querySelector('canvas');
+    if (existingCanvas) existingCanvas.remove();
+
+    vmEmulator = new V86({
+      wasm_path: 'https://copy.sh/v86/v86.wasm',
+      memory_size: 64 * 1024 * 1024,
+      vga_memory_size: 4 * 1024 * 1024,
+      screen_container: screenContainer,
+      bios: { url: 'https://copy.sh/v86/bios/seabios.bin' },
+      vga_bios: { url: 'https://copy.sh/v86/bios/vgabios.bin' },
+      cdrom: { url: 'https://copy.sh/v86/images/linux4.iso' },
+      autostart: true,
+      disable_mouse: false,
+      disable_keyboard: false,
+      network_relay_url: 'wss://relay.widgetry.org/',
+    });
+
+    // Hide boot text when VM is ready
+    vmEmulator.add_listener('screen-set-mode', (is_graphic) => {
+      const bootText = document.getElementById('vmBootText');
+      if (bootText) bootText.style.display = 'none';
+      const canvas = screenContainer.querySelector('canvas');
+      if (canvas) {
+        canvas.style.display = '';
+        canvas.style.width = '100%';
+        canvas.style.height = '100%';
+      }
+    });
+
+    vmEmulator.add_listener('emulator-started', () => {
+      vmRunning = true;
+      updateVMStatus('running');
+      showToast('虚拟机已启动', 'success');
+      // Start auto-save
+      vmAutoSaveInterval = setInterval(autoSaveVM, VM_AUTO_SAVE_MS);
+    });
+
+    // Restore saved state if available
+    if (savedState) {
+      try {
+        await vmEmulator.restore_state(savedState);
+        showToast('快照已恢复', 'info');
+      } catch(e) {
+        console.warn('Failed to restore VM state, starting fresh:', e);
+        showToast('快照恢复失败，从镜像启动', 'warning');
+      }
+    }
+  } catch(e) {
+    console.error('VM start error:', e);
+    updateVMStatus('stopped');
+    document.getElementById('vmBootText').innerHTML = `
+      <div style="font-size:2rem;margin-bottom:8px">⚠️</div>
+      <div>虚拟机启动失败</div>
+      <div style="font-size:0.65rem;color:var(--muted);margin-top:8px">${e.message || '未知错误'}</div>
+      <button onclick="startVM()" style="margin-top:12px;padding:6px 16px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-family:inherit;font-size:0.75rem">重试</button>
+    `;
+  }
+}
+
+async function autoSaveVM() {
+  if (!vmEmulator || !vmRunning) return;
+  try {
+    updateVMStatus('saving');
+    const state = await vmEmulator.save_state();
+    await saveVMStateToDB(state);
+    updateVMStatus('running');
+    console.log('VM auto-saved: ' + (state.byteLength / 1024 / 1024).toFixed(1) + ' MB');
+  } catch(e) {
+    console.warn('VM auto-save failed:', e);
+    updateVMStatus('running');
+  }
+}
+
+async function saveVMSnapshot() {
+  if (!vmEmulator || !vmRunning) {
+    showToast('虚拟机未运行', 'warning');
+    return;
+  }
+  try {
+    updateVMStatus('saving');
+    const state = await vmEmulator.save_state();
+    await saveVMStateToDB(state);
+    updateVMStatus('running');
+    showToast('快照已保存 (' + (state.byteLength / 1024 / 1024).toFixed(1) + ' MB)', 'success');
+  } catch(e) {
+    updateVMStatus('running');
+    showToast('保存失败: ' + e.message, 'warning');
+  }
+}
+
+function stopVM() {
+  if (vmEmulator) {
+    try {
+      // Save before stopping
+      vmEmulator.save_state().then(state => {
+        saveVMStateToDB(state).catch(() => {});
+      }).catch(() => {});
+      vmEmulator.stop();
+    } catch(e) {}
+    vmEmulator = null;
+  }
+  if (vmAutoSaveInterval) {
+    clearInterval(vmAutoSaveInterval);
+    vmAutoSaveInterval = null;
+  }
+  vmRunning = false;
+  updateVMStatus('stopped');
+
+  // Restore boot text
+  const bootText = document.getElementById('vmBootText');
+  if (bootText) {
+    bootText.style.display = '';
+    bootText.innerHTML = `
+      <div style="font-size:2rem;margin-bottom:8px">🖥️</div>
+      <div>Basic OS 虚拟机</div>
+      <div style="font-size:0.65rem;color:var(--muted);margin-top:8px">点击"启动"来开启你的虚拟机</div>
+      <div style="font-size:0.65rem;color:var(--muted);margin-top:4px">💡 每人拥有独立的永久虚拟机</div>
+    `;
+  }
+  // Remove canvas
+  const canvas = document.getElementById('vmScreen').querySelector('canvas');
+  if (canvas) canvas.remove();
+
+  showToast('虚拟机已停止', 'info');
+}
+
+async function resetVM() {
+  if (!confirm('确定要重置虚拟机吗？所有数据将丢失，此操作不可恢复！')) return;
+  stopVM();
+  try {
+    await deleteVMStateFromDB();
+    showToast('虚拟机已重置', 'success');
+  } catch(e) {
+    showToast('重置失败', 'warning');
+  }
+}
+
+function closeVmWindow() {
+  stopVM();
+  closeWindow('win-vm');
+}
+
+// Update the openWindow function to also handle VM-specific initialization
+// (The original openWindow is already defined, we just need to extend it for VM)
+// This is handled by the existing openWindow logic — no changes needed for VM window opening
+
+// =============================================
 // INIT
 // =============================================
 renderStoreApps();
 // Initialize browser history with default URL
 addToBrowserHistory('https://huhubasic.github.io/Basic-OS');
+// Update tray popup with current version
+if (systemState.updateInstalled) {
+  const trayVerEls = document.querySelectorAll('.tray-popup-value');
+  trayVerEls.forEach(el => {
+    if (el.textContent.includes('Basic OS')) el.textContent = 'Basic OS v' + systemState.version;
+  });
+}
+// Update version in settings
+document.querySelectorAll('.version-badge').forEach(b => {
+  if (systemState.updateInstalled) b.textContent = 'Basic OS v' + systemState.version;
+});
+// Update about section version
+const aboutH2 = document.querySelector('#sec-about h2');
+if (aboutH2 && systemState.updateInstalled) {
+  aboutH2.textContent = 'HU basic OS v' + systemState.version;
+}
+// Set boot subtitle
+if (systemState.updateInstalled) {
+  document.querySelector('.boot-subtitle').textContent = 'Basic OS v' + systemState.version + ' — 正在启动...';
+}
 openWindow('browser');
 </script>
 

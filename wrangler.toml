@@ -1,0 +1,6 @@
+name = "basic-os-site"
+main = "cloudflare-worker.js"
+compatibility_date = "2025-01-01"
+
+[assets]
+directory = "."
