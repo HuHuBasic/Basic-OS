@@ -150,5 +150,5 @@ basic-os/
 ## Links / 链接
 
 - GitHub: https://github.com/HuHuBasic/Basic-OS
-- Gitee: https://gitee.com/HuHuBasic/Basic-OS
+- Gitee: https://gitee.com/basic-game/basic-os
 - Website: https://HuHuBasic.github.io/Basic-OS
