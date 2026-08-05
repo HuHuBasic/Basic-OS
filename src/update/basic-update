@@ -1,0 +1,350 @@
+#!/bin/sh
+# ================================================
+#  basic OS - Update System (basic-update)
+#  Supports: check, download, install, rollback
+#  Update packages: .bup (basic update package)
+# ================================================
+
+# ---- Load i18n ----
+if [ -f /etc/basic-os/locale/i18n.sh ]; then
+    . /etc/basic-os/locale/i18n.sh
+    load_lang
+    t() {
+        local key="$1"
+        shift
+        local val
+        eval "val=\${$key:-$key}"
+        if [ $# -gt 0 ]; then
+            printf "$val" "$@"
+        else
+            echo "$val"
+        fi
+    }
+else
+    # Minimal fallback (English)
+    UPD_CHECKING="Checking for updates..."
+    UPD_NO_UPDATE="basic OS is up to date."
+    UPD_FOUND="New version available: %s"
+    UPD_DOWNLOADING="Downloading update package..."
+    UPD_INSTALLING="Installing update..."
+    UPD_SUCCESS="Update completed successfully!"
+    UPD_FAILED="Update failed."
+    UPD_REBOOT_NEEDED="Please reboot to apply changes."
+    UPD_CURRENT="Current version: %s"
+    UPD_LATEST="Latest version: %s"
+    UPD_NETWORK_ERROR="Network error. Check your connection."
+    UPD_APPLYING="Applying update package..."
+    UPD_VERIFYING="Verifying update integrity..."
+    UPD_VERIFY_OK="Update package verified."
+    UPD_VERIFY_FAIL="Update package verification failed!"
+    UPD_BACKUP="Creating backup..."
+    UPD_ROLLBACK="Rolling back changes..."
+    UPD_ROLLBACK_OK="Rollback complete."
+    t() { eval "echo \${$1:-$1}"; }
+fi
+
+# ---- Configuration ----
+UPDATE_SERVER="https://raw.githubusercontent.com/HuHuBasic/Basic-OS/main/updates"
+VERSION_FILE="/etc/basic-os/version"
+UPDATE_CACHE="/var/cache/basic-update"
+BACKUP_DIR="/var/cache/basic-update/backup"
+UPDATE_LOG="/var/log/basic-update.log"
+
+mkdir -p "$UPDATE_CACHE" "$BACKUP_DIR" "$(dirname "$UPDATE_LOG")"
+
+# ====== Functions ======
+
+# ---- Get current version ----
+get_current_version() {
+    if [ -f "$VERSION_FILE" ]; then
+        cat "$VERSION_FILE"
+    else
+        echo "1.0.0"
+    fi
+}
+
+# ---- Get latest version from server ----
+get_latest_version() {
+    local ver_url="${UPDATE_SERVER}/latest.txt"
+    local latest
+    latest=$(wget -q -O - "$ver_url" 2>/dev/null | head -1)
+    if [ -z "$latest" ]; then
+        echo ""
+        return 1
+    fi
+    echo "$latest"
+}
+
+# ---- Compare versions ----
+# Returns: 0=same, 1=older, 2=newer
+version_compare() {
+    local v1="$1" v2="$2"
+    [ "$v1" = "$v2" ] && return 0
+    local IFS=.
+    set -- $v1; local a1=$1 a2=$2 a3=$3
+    set -- $v2; local b1=$1 b2=$2 b3=$3
+    [ "$a1" -gt "$b1" ] && return 2
+    [ "$a1" -lt "$b1" ] && return 1
+    [ "$a2" -gt "$b2" ] && return 2
+    [ "$a2" -lt "$b2" ] && return 1
+    [ "$a3" -gt "$b3" ] && return 2
+    [ "$a3" -lt "$b3" ] && return 1
+    return 0
+}
+
+# ---- Check for updates ----
+check_update() {
+    echo "$(t UPD_CHECKING)"
+    local current=$(get_current_version)
+    local latest=$(get_latest_version)
+
+    if [ -z "$latest" ]; then
+        echo "$(t UPD_NETWORK_ERROR)"
+        return 1
+    fi
+
+    version_compare "$current" "$latest"
+    local cmp=$?
+
+    case $cmp in
+        0|1)
+            echo "$(t UPD_NO_UPDATE)"
+            echo "$(t UPD_CURRENT "$current")"
+            return 0
+            ;;
+        2)
+            echo "$(t UPD_FOUND "$latest")"
+            echo "$(t UPD_CURRENT "$current")"
+            echo "$(t UPD_LATEST "$latest")"
+            return 2
+            ;;
+    esac
+}
+
+# ---- Download update package ----
+download_update() {
+    local version="$1"
+    local pkg_name="basic-update-${version}.bup"
+    local pkg_url="${UPDATE_SERVER}/${pkg_name}"
+    local pkg_file="${UPDATE_CACHE}/${pkg_name}"
+
+    echo "$(t UPD_DOWNLOADING)"
+    rm -f "$pkg_file"
+
+    if wget -q -O "$pkg_file" "$pkg_url" 2>/dev/null; then
+        if [ -s "$pkg_file" ]; then
+            echo "  -> $pkg_file"
+            return 0
+        fi
+    fi
+
+    echo "$(t UPD_NETWORK_ERROR)"
+    return 1
+}
+
+# ---- Verify update package ----
+verify_update() {
+    local pkg_file="$1"
+    echo "$(t UPD_VERIFYING)"
+
+    # Check for optional signature file
+    local sig_url="${pkg_file}.sha256"
+    local sig_file="${UPDATE_CACHE}/update.sha256"
+
+    if wget -q -O "$sig_file" "$sig_url" 2>/dev/null; then
+        local expected=$(head -1 "$sig_file" | awk '{print $1}')
+        local actual=$(sha256sum "$pkg_file" 2>/dev/null | awk '{print $1}' || md5sum "$pkg_file" 2>/dev/null | awk '{print $1}')
+        if [ -n "$expected" ] && [ "$expected" = "$actual" ]; then
+            echo "$(t UPD_VERIFY_OK)"
+            rm -f "$sig_file"
+            return 0
+        else
+            echo "$(t UPD_VERIFY_FAIL)"
+            rm -f "$sig_file"
+            return 1
+        fi
+    fi
+
+    # No signature file - just check the file is a valid tar.gz
+    if tar tzf "$pkg_file" >/dev/null 2>&1; then
+        echo "$(t UPD_VERIFY_OK)"
+        return 0
+    fi
+
+    echo "$(t UPD_VERIFY_FAIL)"
+    return 1
+}
+
+# ---- Create backup ----
+create_backup() {
+    local version=$(get_current_version)
+    local backup_file="${BACKUP_DIR}/backup-${version}.tar.gz"
+
+    echo "$(t UPD_BACKUP)"
+    # Backup key system files
+    tar czf "$backup_file" \
+        -C / \
+        etc/basic-os/ \
+        usr/sbin/basic-* \
+        usr/bin/basic-* \
+        usr/share/basic-apps/ \
+        2>/dev/null
+
+    [ -f "$backup_file" ] && echo "  -> $backup_file"
+}
+
+# ---- Apply update ----
+apply_update() {
+    local pkg_file="$1"
+    echo "$(t UPD_APPLYING)"
+
+    # Extract update package to /
+    if tar xzf "$pkg_file" -C / 2>/dev/null; then
+        # Run post-install script if present
+        if [ -f /tmp/update-post.sh ]; then
+            sh /tmp/update-post.sh
+            rm -f /tmp/update-post.sh
+        fi
+        return 0
+    fi
+
+    return 1
+}
+
+# ---- Rollback ----
+rollback_update() {
+    echo "$(t UPD_ROLLBACK)"
+
+    local latest_backup=$(ls -t "$BACKUP_DIR"/backup-*.tar.gz 2>/dev/null | head -1)
+    if [ -z "$latest_backup" ]; then
+        echo "No backup found!"
+        return 1
+    fi
+
+    if tar xzf "$latest_backup" -C / 2>/dev/null; then
+        echo "$(t UPD_ROLLBACK_OK)"
+        return 0
+    fi
+
+    return 1
+}
+
+# ---- Install update ----
+install_update() {
+    local version="$1"
+    local pkg_file="${UPDATE_CACHE}/basic-update-${version}.bup"
+
+    echo ""
+    echo "============================================"
+    echo "  basic OS Update System"
+    echo "============================================"
+    echo ""
+
+    # Download if not already cached
+    if [ ! -f "$pkg_file" ]; then
+        download_update "$version" || return 1
+    fi
+
+    # Verify
+    verify_update "$pkg_file" || return 1
+
+    # Create backup
+    create_backup
+
+    # Apply
+    echo "$(t UPD_INSTALLING)"
+    if apply_update "$pkg_file"; then
+        # Update version file
+        echo "$version" > "$VERSION_FILE"
+        echo "$(t UPD_SUCCESS)"
+        echo "$(t UPD_REBOOT_NEEDED)"
+        return 0
+    else
+        echo "$(t UPD_FAILED)"
+        echo "$(t UPD_ROLLBACK)"
+        rollback_update
+        return 1
+    fi
+}
+
+# ---- Full update flow (check + download + install) ----
+full_update() {
+    local current=$(get_current_version)
+    local latest=$(get_latest_version)
+
+    if [ -z "$latest" ]; then
+        echo "$(t UPD_NETWORK_ERROR)"
+        return 1
+    fi
+
+    version_compare "$current" "$latest"
+    local cmp=$?
+
+    case $cmp in
+        0|1)
+            echo "$(t UPD_NO_UPDATE)"
+            echo "$(t UPD_CURRENT "$current")"
+            return 0
+            ;;
+        2)
+            echo "$(t UPD_FOUND "$latest")"
+            install_update "$latest"
+            return $?
+            ;;
+    esac
+}
+
+# ====== Main ======
+
+usage() {
+    echo "basic-update - basic OS Update System"
+    echo ""
+    echo "Usage: basic-update [command]"
+    echo ""
+    echo "Commands:"
+    echo "  check     Check for available updates"
+    echo "  update    Download and install latest update"
+    echo "  install   Install a specific version update package"
+    echo "  rollback  Rollback to previous version"
+    echo "  version   Show current version"
+    echo "  clean     Clean update cache"
+    echo ""
+    echo "Without arguments, performs full update flow."
+}
+
+case "${1:-}" in
+    check)
+        check_update
+        ;;
+    update)
+        full_update
+        ;;
+    install)
+        if [ -z "$2" ]; then
+            echo "Usage: basic-update install <version>"
+            echo "Example: basic-update install 1.1.0"
+            exit 1
+        fi
+        install_update "$2"
+        ;;
+    rollback)
+        rollback_update
+        ;;
+    version)
+        echo "basic OS version: $(get_current_version)"
+        ;;
+    clean)
+        rm -rf "$UPDATE_CACHE"/*
+        echo "Update cache cleaned."
+        ;;
+    help|--help|-h)
+        usage
+        ;;
+    *)
+        if [ -z "$1" ]; then
+            full_update
+        else
+            usage
+        fi
+        ;;
+esac

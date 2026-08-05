@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>basic OS - Lightweight Linux Operating System</title>
+<style>
+  :root {
+    --bg: #0a0e17;
+    --bg2: #111827;
+    --bg3: #1a2332;
+    --accent: #3b82f6;
+    --accent2: #60a5fa;
+    --text: #e2e8f0;
+    --text2: #94a3b8;
+    --border: #1e293b;
+    --green: #22c55e;
+    --radius: 12px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+  /* Navigation */
+  .nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    background: rgba(10,14,23,0.95);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    z-index: 1000;
+    padding: 0 24px;
+    height: 64px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .nav-logo {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--text);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .nav-logo .logo-icon {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--accent), #8b5cf6);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 900;
+    font-size: 1.1rem;
+    color: #fff;
+  }
+  .nav-links { display: flex; gap: 8px; align-items: center; }
+  .nav-links a {
+    color: var(--text2);
+    text-decoration: none;
+    padding: 8px 16px;
+    border-radius: 8px;
+    transition: all .2s;
+    font-size: .9rem;
+  }
+  .nav-links a:hover { color: var(--text); background: var(--bg3); }
+  .nav-links a.download-btn {
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+  .nav-links a.download-btn:hover { background: #2563eb; }
+  /* Language Switch */
+  .lang-switch {
+    display: flex;
+    gap: 4px;
+    margin-left: 16px;
+    background: var(--bg3);
+    border-radius: 8px;
+    padding: 3px;
+  }
+  .lang-switch button {
+    background: none;
+    border: none;
+    color: var(--text2);
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: .8rem;
+    transition: all .2s;
+  }
+  .lang-switch button.active {
+    background: var(--accent);
+    color: #fff;
+  }
+  .lang-switch button:hover:not(.active) { color: var(--text); }
+  /* Hero */
+  .hero {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 120px 24px 80px;
+    position: relative;
+    background: 
+      radial-gradient(ellipse 80% 60% at 50% 0%, rgba(59,130,246,0.15), transparent),
+      radial-gradient(ellipse 60% 50% at 80% 100%, rgba(139,92,246,0.1), transparent);
+  }
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(59,130,246,0.1);
+    border: 1px solid rgba(59,130,246,0.3);
+    border-radius: 100px;
+    padding: 6px 16px;
+    font-size: .85rem;
+    color: var(--accent2);
+    margin-bottom: 32px;
+  }
+  .hero-badge .dot {
+    width: 8px; height: 8px;
+    background: var(--green);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .hero h1 {
+    font-size: clamp(2.5rem, 6vw, 4.5rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    margin-bottom: 20px;
+    background: linear-gradient(135deg, var(--text), var(--accent2), #a78bfa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .hero p {
+    font-size: 1.2rem;
+    color: var(--text2);
+    max-width: 600px;
+    margin-bottom: 40px;
+  }
+  .hero-buttons {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 28px;
+    border-radius: 100px;
+    font-weight: 600;
+    font-size: 1rem;
+    text-decoration: none;
+    transition: all .25s;
+    cursor: pointer;
+    border: none;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 4px 20px rgba(59,130,246,0.4);
+  }
+  .btn-primary:hover { background: #2563eb; transform: translateY(-2px); box-shadow: 0 8px 30px rgba(59,130,246,0.5); }
+  .btn-outline {
+    background: transparent;
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-outline:hover { background: var(--bg3); border-color: var(--accent); }
+  /* Sections */
+  section {
+    padding: 100px 24px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .section-title {
+    text-align: center;
+    margin-bottom: 60px;
+  }
+  .section-title h2 {
+    font-size: 2.2rem;
+    font-weight: 700;
+    margin-bottom: 12px;
+  }
+  .section-title p { color: var(--text2); font-size: 1.1rem; }
+  /* Feature Grid */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 24px;
+  }
+  .feature-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 32px 28px;
+    transition: all .3s;
+  }
+  .feature-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-4px);
+    box-shadow: 0 8px 40px rgba(59,130,246,0.1);
+  }
+  .feature-icon {
+    width: 48px; height: 48px;
+    background: rgba(59,130,246,0.1);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    margin-bottom: 16px;
+  }
+  .feature-card h3 { font-size: 1.1rem; margin-bottom: 8px; }
+  .feature-card p { color: var(--text2); font-size: .9rem; }
+  /* Specs */
+  .specs {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 40px;
+    margin-top: 40px;
+  }
+  .specs h3 { margin-bottom: 24px; font-size: 1.3rem; }
+  .spec-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+  }
+  .spec-item {
+    background: var(--bg3);
+    border-radius: 8px;
+    padding: 16px;
+  }
+  .spec-item .label { color: var(--text2); font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
+  .spec-item .value { font-size: 1.1rem; font-weight: 600; margin-top: 4px; }
+  /* Download Section */
+  .download-card {
+    background: linear-gradient(135deg, var(--bg2), var(--bg3));
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 48px;
+    text-align: center;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+  .download-card .file-info {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--text2);
+    font-size: .9rem;
+    margin: 16px 0;
+  }
+  .download-card .checksum {
+    font-family: monospace;
+    font-size: .8rem;
+    color: var(--text2);
+    background: var(--bg3);
+    padding: 8px 16px;
+    border-radius: 8px;
+    display: inline-block;
+    margin-top: 12px;
+    word-break: break-all;
+  }
+  /* Footer */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 40px 24px;
+    text-align: center;
+    color: var(--text2);
+    font-size: .85rem;
+  }
+  footer a { color: var(--accent2); text-decoration: none; }
+  /* Mobile */
+  @media (max-width: 768px) {
+    .nav-links { display: none; }
+    .hero h1 { font-size: 2rem; }
+    section { padding: 60px 16px; }
+    .download-card { padding: 28px; }
+  }
+  /* Hidden by lang */
+  [lang] { display: none; }
+  body[data-lang="en"] [lang="en"] { display: revert; }
+  body[data-lang="zh-CN"] [lang="zh-CN"] { display: revert; }
+  body[data-lang="zh-TW"] [lang="zh-TW"] { display: revert; }
+</style>
+</head>
+<body data-lang="en">
+
+<!-- Navigation -->
+<nav class="nav">
+  <a href="#" class="nav-logo"><span class="logo-icon">B</span>basic OS</a>
+  <div class="nav-links">
+    <a href="#features" lang="en">Features</a>
+    <a href="#features" lang="zh-CN">特性</a>
+    <a href="#features" lang="zh-TW">特性</a>
+    <a href="#specs" lang="en">Specs</a>
+    <a href="#specs" lang="zh-CN">规格</a>
+    <a href="#specs" lang="zh-TW">規格</a>
+    <a href="#download" class="download-btn" lang="en">Download</a>
+    <a href="#download" class="download-btn" lang="zh-CN">下载</a>
+    <a href="#download" class="download-btn" lang="zh-TW">下載</a>
+    <div class="lang-switch">
+      <button onclick="setLang('en')" class="active" id="btn-en">EN</button>
+      <button onclick="setLang('zh-CN')" id="btn-zh-CN">简中</button>
+      <button onclick="setLang('zh-TW')" id="btn-zh-TW">繁中</button>
+    </div>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="hero">
+  <div class="hero-badge">
+    <span class="dot"></span>
+    <span lang="en">Linux Kernel 7.1.6 — Stable</span>
+    <span lang="zh-CN">Linux 内核 7.1.6 — 稳定版</span>
+    <span lang="zh-TW">Linux 核心 7.1.6 — 穩定版</span>
+  </div>
+  <h1>basic OS</h1>
+  <p lang="en">A minimal, fast, and beautiful Linux operating system. Built from scratch with framebuffer desktop, graphical installer, and app center.</p>
+  <p lang="zh-CN">一个极简、快速、美观的 Linux 操作系统。从零构建，内置 framebuffer 桌面、图形化安装程序和应用中心。</p>
+  <p lang="zh-TW">一個極簡、快速、美觀的 Linux 作業系統。從零構建，內建 framebuffer 桌面、圖形化安裝程式和應用中心。</p>
+  <div class="hero-buttons">
+    <a href="#download" class="btn btn-primary" lang="en">Download ISO</a>
+    <a href="#download" class="btn btn-primary" lang="zh-CN">下载 ISO</a>
+    <a href="#download" class="btn btn-primary" lang="zh-TW">下載 ISO</a>
+    <a href="https://github.com/HuHuBasic/Basic-OS" class="btn btn-outline" target="_blank">GitHub</a>
+  </div>
+</section>
+
+<!-- Features -->
+<section id="features">
+  <div class="section-title">
+    <h2 lang="en">Why basic OS?</h2>
+    <h2 lang="zh-CN">为什么选择 basic OS？</h2>
+    <h2 lang="zh-TW">為什麼選擇 basic OS？</h2>
+    <p lang="en">Designed for simplicity, speed, and hackability</p>
+    <p lang="zh-CN">为简洁、速度和可定制性而生</p>
+    <p lang="zh-TW">為簡潔、速度和可訂製性而生</p>
+  </div>
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="feature-icon">🖥️</div>
+      <h3 lang="en">Framebuffer Desktop</h3>
+      <h3 lang="zh-CN">Framebuffer 桌面</h3>
+      <h3 lang="zh-TW">Framebuffer 桌面</h3>
+      <p lang="en">Pure C framebuffer desktop — no X11, no Wayland. Just raw pixel access for lightning-fast rendering.</p>
+      <p lang="zh-CN">纯 C 语言 framebuffer 桌面 — 无需 X11、无需 Wayland。直接写屏，极速渲染。</p>
+      <p lang="zh-TW">純 C 語言 framebuffer 桌面 — 無需 X11、無需 Wayland。直接寫屏，極速渲染。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">📦</div>
+      <h3 lang="en">App Center</h3>
+      <h3 lang="zh-CN">应用中心</h3>
+      <h3 lang="zh-TW">應用中心</h3>
+      <p lang="en">Graphical TUI app center with one-click install, search, and update. Browse and install apps with ease.</p>
+      <p lang="zh-CN">图形化 TUI 应用中心，一键安装、搜索和更新。轻松浏览和安装应用。</p>
+      <p lang="zh-TW">圖形化 TUI 應用中心，一鍵安裝、搜尋和更新。輕鬆瀏覽和安裝應用。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">💿</div>
+      <h3 lang="en">Graphical Installer</h3>
+      <h3 lang="zh-CN">图形化安装程序</h3>
+      <h3 lang="zh-TW">圖形化安裝程式</h3>
+      <p lang="en">Install to your hard disk with a user-friendly dialog-based installer. Select disk, confirm, done.</p>
+      <p lang="zh-CN">使用友好的 dialog 图形安装程序安装到硬盘。选择磁盘、确认、完成。</p>
+      <p lang="zh-TW">使用友善的 dialog 圖形安裝程式安裝到硬碟。選擇磁碟、確認、完成。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⚡</div>
+      <h3 lang="en">Ultra Lightweight</h3>
+      <h3 lang="zh-CN">超轻量级</h3>
+      <h3 lang="zh-TW">超輕量級</h3>
+      <p lang="en">Only 14MB ISO. Statically linked BusyBox — zero external dependencies. Boots in seconds.</p>
+      <p lang="zh-CN">仅 14MB ISO。BusyBox 静态编译 — 零外部依赖。秒级启动。</p>
+      <p lang="zh-TW">僅 14MB ISO。BusyBox 靜態編譯 — 零外部依賴。秒級啟動。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🌐</div>
+      <h3 lang="en">Multi-Language</h3>
+      <h3 lang="zh-CN">多语言支持</h3>
+      <h3 lang="zh-TW">多語言支援</h3>
+      <p lang="en">Full i18n support for English, Simplified Chinese, and Traditional Chinese. All system tools localized.</p>
+      <p lang="zh-CN">完整的 i18n 支持：英文、简体中文、繁体中文。所有系统工具均已本地化。</p>
+      <p lang="zh-TW">完整的 i18n 支援：英文、簡體中文、繁體中文。所有系統工具均已本地化。</p>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🔄</div>
+      <h3 lang="en">Update System</h3>
+      <h3 lang="zh-CN">更新系统</h3>
+      <h3 lang="zh-TW">更新系統</h3>
+      <p lang="en">Delta update packages. Download only what changed. Simple one-command system upgrades.</p>
+      <p lang="zh-CN">增量更新包机制。只下载变更部分。一条命令完成系统升级。</p>
+      <p lang="zh-TW">增量更新包機制。只下載變更部分。一條命令完成系統升級。</p>
+    </div>
+  </div>
+</section>
+
+<!-- Specs -->
+<section id="specs">
+  <div class="section-title">
+    <h2 lang="en">Technical Specifications</h2>
+    <h2 lang="zh-CN">技术规格</h2>
+    <h2 lang="zh-TW">技術規格</h2>
+  </div>
+  <div class="specs">
+    <div class="spec-grid">
+      <div class="spec-item">
+        <div class="label" lang="en">Kernel</div>
+        <div class="label" lang="zh-CN">内核</div>
+        <div class="label" lang="zh-TW">核心</div>
+        <div class="value">Linux 7.1.6</div>
+      </div>
+      <div class="spec-item">
+        <div class="label" lang="en">User Space</div>
+        <div class="label" lang="zh-CN">用户空间</div>
+        <div class="label" lang="zh-TW">使用者空間</div>
+        <div class="value">BusyBox 1.36.1</div>
+      </div>
+      <div class="spec-item">
+        <div class="label" lang="en">Architecture</div>
+        <div class="label" lang="zh-CN">架构</div>
+        <div class="label" lang="zh-TW">架構</div>
+        <div class="value">x86_64</div>
+      </div>
+      <div class="spec-item">
+        <div class="label" lang="en">ISO Size</div>
+        <div class="label" lang="zh-CN">ISO 大小</div>
+        <div class="label" lang="zh-TW">ISO 大小</div>
+        <div class="value">~14 MB</div>
+      </div>
+      <div class="spec-item">
+        <div class="label" lang="en">Desktop</div>
+        <div class="label" lang="zh-CN">桌面</div>
+        <div class="label" lang="zh-TW">桌面</div>
+        <div class="value">Framebuffer</div>
+      </div>
+      <div class="spec-item">
+        <div class="label" lang="en">Languages</div>
+        <div class="label" lang="zh-CN">语言</div>
+        <div class="label" lang="zh-TW">語言</div>
+        <div class="value">EN, 简体中文, 繁體中文</div>
+      </div>
+      <div class="spec-item">
+        <div class="label" lang="en">Bootloader</div>
+        <div class="label" lang="zh-CN">引导程序</div>
+        <div class="label" lang="zh-TW">引導程式</div>
+        <div class="value">ISOLINUX</div>
+      </div>
+      <div class="spec-item">
+        <div class="label" lang="en">Filesystems</div>
+        <div class="label" lang="zh-CN">文件系统</div>
+        <div class="label" lang="zh-TW">檔案系統</div>
+        <div class="value">ext4, vfat, exfat, iso9660, overlay, tmpfs</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Download -->
+<section id="download">
+  <div class="section-title">
+    <h2 lang="en">Download basic OS</h2>
+    <h2 lang="zh-CN">下载 basic OS</h2>
+    <h2 lang="zh-TW">下載 basic OS</h2>
+  </div>
+  <div class="download-card">
+    <h3>basic-os.iso</h3>
+    <div class="file-info">
+      <span lang="en">Version 1.0.0</span>
+      <span lang="zh-CN">版本 1.0.0</span>
+      <span lang="zh-TW">版本 1.0.0</span>
+      &middot;
+      <span>~14 MB</span>
+      &middot;
+      <span>x86_64</span>
+    </div>
+    <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os.iso" class="btn btn-primary" style="margin-top:16px;" lang="en">Download ISO</a>
+    <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os.iso" class="btn btn-primary" style="margin-top:16px;" lang="zh-CN">下载 ISO</a>
+    <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os.iso" class="btn btn-primary" style="margin-top:16px;" lang="zh-TW">下載 ISO</a>
+    <br>
+    <a href="https://github.com/HuHuBasic/Basic-OS" class="btn btn-outline" target="_blank" style="margin-top:8px;" lang="en">View on GitHub</a>
+    <a href="https://github.com/HuHuBasic/Basic-OS" class="btn btn-outline" target="_blank" style="margin-top:8px;" lang="zh-CN">在 GitHub 上查看</a>
+    <a href="https://github.com/HuHuBasic/Basic-OS" class="btn btn-outline" target="_blank" style="margin-top:8px;" lang="zh-TW">在 GitHub 上檢視</a>
+  </div>
+</section>
+
+<!-- Quick Start -->
+<section>
+  <div class="section-title">
+    <h2 lang="en">Quick Start</h2>
+    <h2 lang="zh-CN">快速开始</h2>
+    <h2 lang="zh-TW">快速開始</h2>
+  </div>
+  <div class="specs">
+    <h3 lang="en">Run in QEMU</h3>
+    <h3 lang="zh-CN">在 QEMU 中运行</h3>
+    <h3 lang="zh-TW">在 QEMU 中執行</h3>
+    <pre style="background:var(--bg3);color:var(--text);padding:20px;border-radius:8px;overflow-x:auto;font-family:monospace;font-size:.9rem;"># <span lang="en">Desktop mode (Live)</span><span lang="zh-CN">桌面模式 (Live)</span><span lang="zh-TW">桌面模式 (Live)</span>
+qemu-system-x86_64 -cdrom basic-os.iso -m 512M
+
+# <span lang="en">Text mode</span><span lang="zh-CN">文本模式</span><span lang="zh-TW">文字模式</span>
+qemu-system-x86_64 -kernel vmlinuz-basic -initrd initramfs.cpio.gz -append "console=tty0 text quiet"
+
+# <span lang="en">Installer mode</span><span lang="zh-CN">安装模式</span><span lang="zh-TW">安裝模式</span>
+qemu-system-x86_64 -kernel vmlinuz-basic -initrd initramfs.cpio.gz -append "console=tty0 installer quiet"</pre>
+  </div>
+</section>
+
+<!-- Footer -->
+<footer>
+  <p>basic OS &copy; 2025. <span lang="en">Built with passion for minimal computing.</span><span lang="zh-CN">为极简计算而生。</span><span lang="zh-TW">為極簡計算而生。</span></p>
+  <p style="margin-top:8px;">
+    <a href="https://github.com/HuHuBasic/Basic-OS" target="_blank">GitHub</a>
+    &middot;
+    <a href="https://gitee.com/HuHuBasic/Basic-OS" target="_blank">Gitee</a>
+  </p>
+</footer>
+
+<script>
+function setLang(lang) {
+  document.body.setAttribute('data-lang', lang);
+  document.querySelectorAll('.lang-switch button').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-' + lang).classList.add('active');
+  localStorage.setItem('basic-os-lang', lang);
+}
+// Init
+var saved = localStorage.getItem('basic-os-lang') || 'en';
+setLang(saved);
+</script>
+</body>
+</html>

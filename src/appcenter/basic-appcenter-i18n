@@ -1,0 +1,234 @@
+#!/bin/sh
+# ================================================
+#  basic OS - App Center (i18n Multi-Language, dialog GUI)
+# ================================================
+
+export TERM=linux
+DIALOG="/usr/bin/dialog"
+APP_DIR="/usr/share/basic-apps"
+APP_LIST="$APP_DIR/apps.list"
+APP_DATA="$APP_DIR/apps"
+
+# ---- Load i18n ----
+if [ -f /etc/basic-os/locale/i18n.sh ]; then
+    . /etc/basic-os/locale/i18n.sh
+    load_lang
+    _() {
+        local key="$1"
+        shift
+        local val
+        eval "val=\${$key:-$key}"
+        if [ $# -gt 0 ]; then
+            printf "$val" "$@"
+        else
+            echo "$val"
+        fi
+    }
+else
+    _() { echo "$1"; }
+fi
+
+BACKTITLE="$(_ APP_BACKTITLE)"
+
+mkdir -p "$APP_DIR" "$APP_DATA"
+
+# Init app list
+if [ ! -f "$APP_LIST" ]; then
+    cat > "$APP_LIST" << 'EOF'
+# basic OS App Center
+# name|version|description|category|size|url
+hello|1.0.0|A simple hello world demo|Demo|1K|https://raw.githubusercontent.com/basic-os/apps/main/hello/hello-1.0.0.tar.gz
+busybox-extras|1.36.1|Extra BusyBox applets|System|2M|https://raw.githubusercontent.com/basic-os/apps/main/busybox-extras/busybox-extras-1.36.1.tar.gz
+dropbear|2022.83|Lightweight SSH server|Network|500K|https://raw.githubusercontent.com/basic-os/apps/main/dropbear/dropbear-2022.83.tar.gz
+htop|3.3.0|Interactive process viewer|System|300K|https://raw.githubusercontent.com/basic-os/apps/main/htop/htop-3.3.0.tar.gz
+nano|7.2|Simple text editor|Editor|700K|https://raw.githubusercontent.com/basic-os/apps/main/nano/nano-7.2.tar.gz
+lynx|2.9.0|Text-based web browser|Network|2M|https://raw.githubusercontent.com/basic-os/apps/main/lynx/lynx-2.9.0.tar.gz
+python-mini|3.11.0|Minimal Python interpreter|Dev|5M|https://raw.githubusercontent.com/basic-os/apps/main/python-mini/python-mini-3.11.0.tar.gz
+EOF
+fi
+
+# ====== Functions ======
+
+show_main_menu() {
+    while true; do
+        CHOICE=$($DIALOG --backtitle "$BACKTITLE" --title "$(_ APP_TITLE)" \
+          --menu "\n$(_ APP_MENU_MSG)" 18 55 8 \
+          "1" "$(_ APP_MENU_BROWSE)" \
+          "2" "$(_ APP_MENU_INSTALL)" \
+          "3" "$(_ APP_MENU_REMOVE)" \
+          "4" "$(_ APP_MENU_VIEW)" \
+          "5" "$(_ APP_MENU_SEARCH)" \
+          "6" "$(_ APP_MENU_UPDATE)" \
+          "7" "$(_ APP_MENU_ABOUT)" \
+          "8" "$(_ APP_MENU_EXIT)" 2>&1 >/dev/tty)
+
+        [ $? -ne 0 ] && break
+
+        case "$CHOICE" in
+            1) browse_apps ;;
+            2) install_app_dialog ;;
+            3) remove_app_dialog ;;
+            4) show_installed ;;
+            5) search_apps ;;
+            6) update_list ;;
+            7) show_about ;;
+            8) break ;;
+            *) break ;;
+        esac
+    done
+    clear
+}
+
+browse_apps() {
+    local applist=""
+    local idx=1
+    while IFS='|' read -r name version desc category size url; do
+        [ -z "$name" ] && continue
+        [ "${name:0:1}" = "#" ] && continue
+        local mark=""
+        [ -f "$APP_DATA/$name.installed" ] && mark="[INSTALLED]"
+        applist="$applist \"$idx\" \"$name  $version  $mark\" \"$desc  ($category, $size)\""
+        idx=$((idx + 1))
+    done < "$APP_LIST"
+
+    if [ -z "$applist" ]; then
+        $DIALOG --backtitle "$BACKTITLE" --title "$(_ APP_BROWSE_TITLE)" --msgbox "$(_ APP_NO_APPS)" 6 40
+        return
+    fi
+
+    eval $DIALOG --backtitle \"$BACKTITLE\" --title \"$(_ APP_BROWSE_TITLE)\" \
+      --menu \"\\n$(_ APP_BROWSE_MSG)\\n\" 20 65 12 $applist 2>&1 >/dev/tty
+}
+
+install_app_dialog() {
+    local names=""
+    while IFS='|' read -r name version desc category size url; do
+        [ -z "$name" ] && continue
+        [ "${name:0:1}" = "#" ] && continue
+        [ -f "$APP_DATA/$name.installed" ] && continue
+        names="$names \"$name\" \"$desc ($category, $size)\""
+    done < "$APP_LIST"
+
+    if [ -z "$names" ]; then
+        $DIALOG --backtitle "$BACKTITLE" --title "$(_ APP_INSTALL_TITLE)" --msgbox "$(_ APP_ALL_INSTALLED)" 6 45
+        return
+    fi
+
+    APP=$(eval $DIALOG --backtitle \"$BACKTITLE\" --title \"$(_ APP_INSTALL_TITLE)\" \
+      --menu \"\\n$(_ APP_INSTALL_MSG)\\n\" 18 60 10 $names 2>&1 >/dev/tty)
+
+    [ -z "$APP" ] && return
+
+    # Get URL
+    URL=$(grep "^$APP|" "$APP_LIST" | cut -d'|' -f6)
+    VER=$(grep "^$APP|" "$APP_LIST" | cut -d'|' -f2)
+
+    $DIALOG --backtitle "$BACKTITLE" --title "$(_ APP_INSTALL_TITLE)" \
+      --gauge "\n$(_ APP_INSTALLING_GAUGE "$APP" "$VER")\n" 6 50 0 &
+
+    mkdir -p "/tmp/app-install-$APP"
+    cd "/tmp/app-install-$APP"
+
+    if wget -q -O "$APP.tar.gz" "$URL" 2>/dev/null; then
+        tar xzf "$APP.tar.gz" 2>/dev/null
+        [ -d "rootfs" ] && cp -a rootfs/* / 2>/dev/null
+        [ -f "install.sh" ] && sh install.sh
+        echo "$VER" > "$APP_DATA/$APP.installed"
+        wait
+        $DIALOG --backtitle "$BACKTITLE" --title "$(_ APP_SUCCESS_TITLE)" \
+          --msgbox "$(_ APP_INSTALL_SUCCESS "$APP" "$VER")" 6 50
+    else
+        wait
+        $DIALOG --backtitle "$BACKTITLE" --title "$(_ APP_ERROR_TITLE)" \
+          --msgbox "$(_ APP_INSTALL_FAILED "$APP")" 7 45
+    fi
+
+    cd /
+    rm -rf "/tmp/app-install-$APP"
+}
+
+remove_app_dialog() {
+    local names=""
+    for f in "$APP_DATA"/*.installed; do
+        [ -f "$f" ] || continue
+        local name=$(basename "$f" .installed)
+        names="$names \"$name\" \"\""
+    done
+
+    if [ -z "$names" ]; then
+        $DIALOG --backtitle "$BACKTITLE" --title "$(_ APP_REMOVE_TITLE)" --msgbox "$(_ APP_NO_INSTALLED)" 6 40
+        return
+    fi
+
+    APP=$(eval $DIALOG --backtitle \"$BACKTITLE\" --title \"$(_ APP_REMOVE_TITLE)\" \
+      --menu \"\\n$(_ APP_REMOVE_MSG)\\n\" 14 45 8 $names 2>&1 >/dev/tty)
+
+    [ -z "$APP" ] && return
+
+    $DIALOG --backtitle "$BACKTITLE" --title "$(_ APP_CONFIRM_TITLE)" \
+      --yesno "$(_ APP_REMOVE_CONFIRM "$APP")" 6 35
+    [ $? -eq 0 ] && rm -f "$APP_DATA/$APP.installed"
+}
+
+show_installed() {
+    local text=""
+    for f in "$APP_DATA"/*.installed; do
+        [ -f "$f" ] || continue
+        local name=$(basename "$f" .installed)
+        local ver=$(cat "$f")
+        text="$text\n  $name  v$ver"
+    done
+
+    if [ -z "$text" ]; then
+        text="\n  $(_ APP_NO_INSTALLED_APPS)"
+    fi
+
+    $DIALOG --backtitle "$BACKTITLE" --title "$(_ APP_INSTALLED_TITLE)" \
+      --msgbox "$text" 14 45
+}
+
+search_apps() {
+    QUERY=$($DIALOG --backtitle "$BACKTITLE" --title "$(_ APP_SEARCH_TITLE)" \
+      --inputbox "$(_ APP_SEARCH_PROMPT)" 8 40 2>&1 >/dev/tty)
+
+    [ -z "$QUERY" ] && return
+
+    local results=""
+    grep -i "$QUERY" "$APP_LIST" | grep -v '^#' | while IFS='|' read -r name version desc category size url; do
+        [ -z "$name" ] && continue
+        local mark=""
+        [ -f "$APP_DATA/$name.installed" ] && mark=" [INSTALLED]"
+        results="$results\n  $name  v$version  ($category)$mark\n    $desc\n"
+    done
+
+    if [ -z "$results" ]; then
+        $DIALOG --backtitle "$BACKTITLE" --title "$(_ APP_SEARCH_TITLE)" \
+          --msgbox "$(_ APP_SEARCH_NO_RESULTS "$QUERY")" 6 40
+    else
+        echo "$results" > /tmp/search-results.txt
+        $DIALOG --backtitle "$BACKTITLE" --title "$(_ APP_SEARCH_RESULTS_TITLE)" \
+          --textbox /tmp/search-results.txt 16 60
+        rm -f /tmp/search-results.txt
+    fi
+}
+
+update_list() {
+    $DIALOG --backtitle "$BACKTITLE" --title "$(_ APP_UPDATE_TITLE)" \
+      --gauge "$(_ APP_UPDATING_GAUGE)" 6 50 0 &
+    if wget -q -O "$APP_LIST.new" "https://raw.githubusercontent.com/basic-os/apps/main/apps.list" 2>/dev/null; then
+        mv "$APP_LIST.new" "$APP_LIST"
+        wait
+        $DIALOG --backtitle "$BACKTITLE" --title "$(_ APP_UPDATE_TITLE)" --msgbox "$(_ APP_UPDATE_SUCCESS)" 6 40
+    else
+        wait
+        $DIALOG --backtitle "$BACKTITLE" --title "$(_ APP_UPDATE_TITLE)" --msgbox "$(_ APP_UPDATE_FAILED)" 7 40
+    fi
+}
+
+show_about() {
+    $DIALOG --backtitle "$BACKTITLE" --title "$(_ APP_ABOUT_TITLE)" \
+      --msgbox "\n$(_ APP_ABOUT_MSG)" 16 55
+}
+
+# ====== Main ======
+show_main_menu

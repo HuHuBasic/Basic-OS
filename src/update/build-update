@@ -1,0 +1,101 @@
+#!/bin/sh
+# ================================================
+#  basic OS - Update Package Builder
+#  Creates .bup (basic update package) files
+#  Usage: build-update <version> [output_dir]
+# ================================================
+
+VERSION="${1:-}"
+OUTPUT_DIR="${2:-/workspace/basic-os/updates}"
+
+if [ -z "$VERSION" ]; then
+    echo "Usage: build-update <version> [output_dir]"
+    echo "Example: build-update 1.1.0"
+    exit 1
+fi
+
+PKG_NAME="basic-update-${VERSION}.bup"
+TEMP_DIR="/tmp/build-update-$$"
+ROOTFS_DIR="/workspace/basic-os/rootfs"
+
+echo "============================================"
+echo "  basic OS Update Package Builder"
+echo "============================================"
+echo ""
+echo "  Version:   $VERSION"
+echo "  Package:   $PKG_NAME"
+echo "  Output:    $OUTPUT_DIR"
+echo ""
+
+# ---- Clean temp ----
+rm -rf "$TEMP_DIR"
+mkdir -p "$TEMP_DIR/pkg" "$OUTPUT_DIR"
+
+# ---- Build rootfs changes ----
+echo "[1/4] Collecting updated files..."
+
+# Build complete rootfs if needed
+if [ ! -d "$ROOTFS_DIR" ]; then
+    echo "  Building rootfs..."
+    /workspace/basic-os/build-rootfs.sh 2>/dev/null || {
+        echo "  ERROR: Failed to build rootfs. Run build-rootfs.sh first."
+        exit 1
+    }
+fi
+
+# ---- Create update payload ----
+echo "[2/4] Creating update payload..."
+
+# Copy system files to package
+if [ -d "$ROOTFS_DIR" ]; then
+    cd "$ROOTFS_DIR"
+    tar czf "$TEMP_DIR/pkg/update.tar.gz" . 2>/dev/null
+    echo "  Payload size: $(du -h "$TEMP_DIR/pkg/update.tar.gz" | cut -f1)"
+else
+    echo "  ERROR: No rootfs directory found."
+    exit 1
+fi
+
+# ---- Generate SHA256 checksum ----
+echo "[3/4] Generating checksums..."
+cd "$TEMP_DIR/pkg"
+sha256sum update.tar.gz > "${PKG_NAME}.sha256" 2>/dev/null || \
+    md5sum update.tar.gz > "${PKG_NAME}.sha256" 2>/dev/null
+
+# ---- Package as .bup ----
+echo "[4/4] Packaging..."
+
+# .bup format: tar.gz with:
+#   - update.tar.gz (payload)
+#   - version.txt (version info)
+#   - changelog.txt (optional)
+
+echo "basic-os $VERSION" > version.txt
+echo "Built: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> version.txt
+
+# Create the .bup file (tar.gz containing the payload)
+cd "$TEMP_DIR/pkg"
+tar czf "$OUTPUT_DIR/$PKG_NAME" update.tar.gz version.txt 2>/dev/null
+
+# Copy checksum
+cp "${PKG_NAME}.sha256" "$OUTPUT_DIR/"
+
+# ---- Create latest.txt ----
+echo "$VERSION" > "$OUTPUT_DIR/latest.txt"
+
+# ---- Cleanup ----
+rm -rf "$TEMP_DIR"
+
+echo ""
+echo "============================================"
+echo "  Package created successfully!"
+echo "============================================"
+echo ""
+echo "  File:     $OUTPUT_DIR/$PKG_NAME"
+echo "  Size:     $(du -h "$OUTPUT_DIR/$PKG_NAME" | cut -f1)"
+echo "  Checksum: $(cat "$OUTPUT_DIR/${PKG_NAME}.sha256")"
+echo ""
+echo "Upload the following to the update server:"
+echo "  $OUTPUT_DIR/$PKG_NAME"
+echo "  $OUTPUT_DIR/${PKG_NAME}.sha256"
+echo "  $OUTPUT_DIR/latest.txt"

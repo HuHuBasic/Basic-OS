@@ -1,0 +1,167 @@
+#!/bin/sh
+# ================================================
+#  basic OS - Graphical Installer (i18n Multi-Language)
+# ================================================
+
+export TERM=linux
+DIALOG="/usr/bin/dialog"
+
+# ---- Load i18n ----
+if [ -f /etc/basic-os/locale/i18n.sh ]; then
+    . /etc/basic-os/locale/i18n.sh
+    load_lang
+    _() {
+        local key="$1"
+        shift
+        local val
+        eval "val=\${$key:-$key}"
+        if [ $# -gt 0 ]; then
+            printf "$val" "$@"
+        else
+            echo "$val"
+        fi
+    }
+else
+    _() { echo "$1"; }
+fi
+
+BACKTITLE="basic OS Installer | Linux Kernel 7.1.6"
+
+# ---- Welcome ----
+$DIALOG --backtitle "$BACKTITLE" --title "$(_ INS_WELCOME_TITLE)" \
+  --msgbox "\n$(_ INS_WELCOME_MSG)" 14 55
+
+[ $? -ne 0 ] && exit 0
+
+# ---- Select Disk ----
+DISKS=""
+for d in /dev/sd? /dev/vd? /dev/nvme?n?; do
+    [ -b "$d" ] || continue
+    SIZE=$(fdisk -l "$d" 2>/dev/null | grep "^Disk $d" | awk '{printf "%s %s",$3,$4}' | tr -d ',')
+    DISKS="$DISKS $d \"$SIZE\" off"
+done
+
+if [ -z "$DISKS" ]; then
+    $DIALOG --backtitle "$BACKTITLE" --title "$(_ INS_ERROR_TITLE)" \
+      --msgbox "$(_ INS_NO_DISKS)" 6 40
+    exit 1
+fi
+
+TARGET=$(eval $DIALOG --backtitle \"$BACKTITLE\" --title \"$(_ INS_SELECT_DISK_TITLE)\" \
+  --radiolist \"\\n$(_ INS_SELECT_DISK_MSG)\\n\" 14 55 5 $DISKS 2>&1 >/dev/tty)
+
+[ -z "$TARGET" ] && exit 0
+
+# ---- Confirmation ----
+$DIALOG --backtitle "$BACKTITLE" --title "$(_ INS_CONFIRM_TITLE)" \
+  --yesno "\n$(_ INS_CONFIRM_MSG "$TARGET")" 13 55
+
+[ $? -ne 0 ] && { $DIALOG --backtitle "$BACKTITLE" --title "$(_ INS_CANCELLED_TITLE)" --msgbox "$(_ INS_CANCELLED_MSG)" 6 40; exit 0; }
+
+# ---- Choose Hostname ----
+HOSTNAME=$($DIALOG --backtitle "$BACKTITLE" --title "$(_ INS_HOSTNAME_TITLE)" \
+  --inputbox "$(_ INS_HOSTNAME_PROMPT)" 8 40 "basic" 2>&1 >/dev/tty)
+[ -z "$HOSTNAME" ] && HOSTNAME="basic"
+
+# ---- Partitioning ----
+$DIALOG --backtitle "$BACKTITLE" --title "$(_ INS_INSTALLING_TITLE)" \
+  --gauge "$(_ INS_PARTITIONING "$TARGET")" 6 50 0
+
+(
+echo "10"; sleep 0.3
+echo "XXX"; echo "$(_ INS_CREATE_PART_TABLE)"; echo "XXX"
+sfdisk "$TARGET" --wipe always >/dev/null 2>&1 <<EOF
+label: dos
+size=256M, type=83, bootable
+type=83
+EOF
+echo "25"; sleep 0.3
+
+# Determine partitions
+if echo "$TARGET" | grep -q "nvme"; then
+    BOOTPART="${TARGET}p1"
+    ROOTPART="${TARGET}p2"
+else
+    BOOTPART="${TARGET}1"
+    ROOTPART="${TARGET}2"
+fi
+
+echo "XXX"; echo "$(_ INS_FORMATTING)"; echo "XXX"
+echo "40"; sleep 0.5
+mkfs.ext4 -F "$ROOTPART" >/dev/null 2>&1
+echo "60"; sleep 0.3
+mkfs.ext4 -F "$BOOTPART" >/dev/null 2>&1
+
+echo "XXX"; echo "$(_ INS_MOUNTING)"; echo "XXX"
+echo "70"; sleep 0.3
+mkdir -p /mnt/root /mnt/boot
+mount "$ROOTPART" /mnt/root
+mount "$BOOTPART" /mnt/boot
+
+echo "XXX"; echo "$(_ INS_COPYING)"; echo "XXX"
+echo "80"; sleep 0.5
+mkdir -p /mnt/root/{dev,proc,sys,tmp,run,mnt,var/log,etc,usr,root,boot}
+for d in bin sbin usr; do
+    cp -a /$d /mnt/root/ 2>/dev/null
+done
+cp -a /etc/* /mnt/root/etc/ 2>/dev/null || true
+
+echo "XXX"; echo "$(_ INS_CREATING_INIT)"; echo "XXX"
+cat > /mnt/root/init << 'INITEOF'
+#!/bin/sh
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mkdir -p /dev/pts && mount -t devpts devpts /dev/pts
+mount -t tmpfs tmpfs /tmp && mount -t tmpfs tmpfs /run
+hostname REPLACE_HOST
+echo "Welcome to basic OS!" | dialog --backtitle "basic OS" --title "Welcome" --msgbox -- 6 40
+exec /bin/sh
+INITEOF
+sed -i "s/REPLACE_HOST/$HOSTNAME/" /mnt/root/init
+chmod +x /mnt/root/init
+
+cp /boot/vmlinuz-basic /mnt/boot/vmlinuz 2>/dev/null
+
+echo "XXX"; echo "$(_ INS_BOOTLOADER)"; echo "XXX"
+echo "90"; sleep 0.5
+mkdir -p /mnt/boot/syslinux
+cp /usr/lib/syslinux/modules/bios/menu.c32 /mnt/boot/syslinux/ 2>/dev/null || true
+cp /usr/lib/syslinux/modules/bios/libutil.c32 /mnt/boot/syslinux/ 2>/dev/null || true
+cp /usr/lib/syslinux/modules/bios/libcom32.c32 /mnt/boot/syslinux/ 2>/dev/null || true
+
+ROOTUUID=$(blkid -s UUID -o value "$ROOTPART" 2>/dev/null || echo "$ROOTPART")
+cat > /mnt/boot/syslinux/syslinux.cfg << SYSEOF
+DEFAULT basic
+TIMEOUT 30
+PROMPT 0
+LABEL basic
+    MENU LABEL basic OS
+    LINUX /vmlinuz
+    APPEND root=UUID=$ROOTUUID rw quiet
+SYSEOF
+
+dd if=/usr/lib/syslinux/modules/bios/mbr.bin of="$TARGET" bs=440 count=1 2>/dev/null || true
+extlinux --install /mnt/boot/syslinux 2>/dev/null || true
+
+cat > /mnt/root/etc/fstab << FSTABEOF
+UUID=$ROOTUUID / ext4 defaults 0 1
+proc /proc proc defaults 0 0
+FSTABEOF
+
+echo "XXX"; echo "$(_ INS_UNMOUNTING)"; echo "XXX"
+echo "95"; sleep 0.3
+umount /mnt/boot
+umount /mnt/root
+
+echo "100"
+) | $DIALOG --backtitle "$BACKTITLE" --title "$(_ INS_INSTALLING_TITLE)" \
+  --gauge "\n$(_ INS_INSTALLING_GAUGE "$TARGET")\n" 8 50 0
+
+# ---- Done ----
+$DIALOG --backtitle "$BACKTITLE" --title "$(_ INS_COMPLETE_TITLE)" \
+  --msgbox "\n$(_ INS_COMPLETE_MSG "$HOSTNAME" "$TARGET")" 13 55
+
+$DIALOG --backtitle "$BACKTITLE" --title "$(_ INS_REBOOT_TITLE)" \
+  --yesno "$(_ INS_REBOOT_PROMPT)" 6 40
+[ $? -eq 0 ] && reboot -f

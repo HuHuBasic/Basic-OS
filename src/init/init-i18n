@@ -1,0 +1,86 @@
+#!/bin/sh
+# ================================================
+#  basic OS - Init Script (i18n Multi-Language)
+#  Linux Kernel 7.1.6 | BusyBox 1.36.1
+# ================================================
+
+# Mount essential filesystems
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mkdir -p /dev/pts
+mount -t devpts devpts /dev/pts
+mount -t tmpfs tmpfs /tmp
+mount -t tmpfs tmpfs /run
+
+# Setup hostname
+hostname basic
+
+# ---- Load i18n ----
+if [ -f /etc/basic-os/locale/i18n.sh ]; then
+    . /etc/basic-os/locale/i18n.sh
+    load_lang
+    _() {
+        local key="$1"
+        shift
+        local val
+        eval "val=\${$key:-$key}"
+        if [ $# -gt 0 ]; then
+            printf "$val" "$@"
+        else
+            echo "$val"
+        fi
+    }
+else
+    # Minimal fallback
+    _() { echo "$1"; }
+fi
+
+# ---- Installer Mode ----
+if grep -q "installer" /proc/cmdline 2>/dev/null; then
+    clear
+    export TERM=linux
+    /usr/sbin/basic-install
+    /sbin/reboot -f
+fi
+
+# ---- Rescue Mode ----
+if grep -q "rescue" /proc/cmdline 2>/dev/null; then
+    clear
+    echo ">>> $(_ I_RESCUE_MODE) <<<"
+    echo "$(_ I_RESCUE_PROMPT)"
+    exec /bin/sh
+fi
+
+# ---- Text Mode (no desktop) ----
+if grep -q "text" /proc/cmdline 2>/dev/null; then
+    clear
+    echo ""
+    echo "  =========================================="
+    echo "     ___           _         ___  ____  "
+    echo "    | _ ) __ _ __ (_)__ ___ / _ \\/ ___\\ "
+    echo "    | _ \\/ _\` / _|| / _/ __| (_) \\___ \\ "
+    echo "    |___/\\__,_\\__||_\\__\\___|\\___/|____/ "
+    echo "  =========================================="
+    echo "          Linux Kernel 7.1.6"
+    echo "  =========================================="
+    echo ""
+    echo "$(_ I_TEXT_MODE_HINT)"
+    echo "$(_ I_TEXT_MODE_DESKTOP_HINT)"
+    echo ""
+    exec /bin/sh
+fi
+
+# ---- Normal boot: try framebuffer desktop ----
+if [ -c /dev/fb0 ]; then
+    echo "$(_ I_STARTING_DESKTOP)"
+    /usr/bin/basic-desktop
+    echo "$(_ I_DESKTOP_EXITED)"
+    exec /bin/sh
+fi
+
+# ---- Fallback to shell ----
+clear
+echo "$(_ I_WELCOME)"
+echo "$(_ I_TEXT_MODE_HINT)"
+exec /bin/sh
