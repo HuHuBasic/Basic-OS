@@ -1,0 +1,3 @@
+#!/bin/sh
+echo "Hello from basic OS App Center!"
+echo "This is a demo app installed via basic-appcenter."

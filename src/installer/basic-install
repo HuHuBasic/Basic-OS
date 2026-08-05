@@ -1,0 +1,160 @@
+#!/bin/sh
+# ================================================
+#  basic OS - Installer
+#  将 basic OS 安装到硬盘
+# ================================================
+
+set -e
+
+echo ""
+echo "=========================================="
+echo "   basic OS Installer"
+echo "=========================================="
+echo ""
+
+# List available disks
+echo "Available disks:"
+echo ""
+for disk in /dev/sd? /dev/vd? /dev/nvme*; do
+    if [ -b "$disk" ]; then
+        size=$(fdisk -l "$disk" 2>/dev/null | grep "^Disk $disk" | awk '{print $3, $4}' | tr -d ',')
+        echo "  $disk  ($size)"
+    fi
+done
+echo ""
+
+# Ask for target disk
+echo -n "Enter target disk (e.g. /dev/sda): "
+read TARGET
+
+if [ ! -b "$TARGET" ]; then
+    echo "ERROR: $TARGET is not a valid block device!"
+    exit 1
+fi
+
+echo ""
+echo "WARNING: This will ERASE ALL DATA on $TARGET!"
+echo -n "Type 'YES' to continue: "
+read CONFIRM
+
+if [ "$CONFIRM" != "YES" ]; then
+    echo "Installation cancelled."
+    exit 0
+fi
+
+echo ""
+echo ">>> Partitioning $TARGET ..."
+
+# Create partition table (MBR) and partitions
+# Part 1: 256MB EFI/boot, Part 2: rest as root
+sfdisk "$TARGET" --wipe always <<EOF
+label: dos
+size=256M, type=83, bootable
+type=83
+EOF
+
+sleep 2
+
+# Determine partition names
+if echo "$TARGET" | grep -q "nvme"; then
+    BOOTPART="${TARGET}p1"
+    ROOTPART="${TARGET}p2"
+else
+    BOOTPART="${TARGET}1"
+    ROOTPART="${TARGET}2"
+fi
+
+echo ">>> Creating filesystems..."
+mkfs.ext4 -F "$ROOTPART" 2>/dev/null
+mkfs.ext4 -F "$BOOTPART" 2>/dev/null
+
+echo ">>> Mounting filesystems..."
+mkdir -p /mnt/root /mnt/boot
+mount "$ROOTPART" /mnt/root
+mount "$BOOTPART" /mnt/boot
+
+echo ">>> Installing basic OS..."
+mkdir -p /mnt/root/{dev,proc,sys,tmp,run,mnt,var/log,etc,usr,root,boot}
+
+# Copy rootfs
+echo "Copying system files..."
+for d in bin sbin usr; do
+    cp -a /$d /mnt/root/
+done
+
+# Copy essential config
+cp -a /etc/* /mnt/root/etc/ 2>/dev/null || true
+
+# Create init
+cat > /mnt/root/init << 'INITEOF'
+#!/bin/sh
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mkdir -p /dev/pts
+mount -t devpts devpts /dev/pts
+mount -t tmpfs tmpfs /tmp
+mount -t tmpfs tmpfs /run
+hostname basic
+echo ""
+echo "Welcome to basic OS!"
+echo "Type 'basic-appcenter' to open the App Center."
+echo ""
+exec /bin/sh
+INITEOF
+chmod +x /mnt/root/init
+
+# Copy kernel
+cp /boot/vmlinuz-basic /mnt/boot/vmlinuz 2>/dev/null || cp /vmlinuz /mnt/boot/vmlinuz
+
+# Install syslinux bootloader
+echo ">>> Installing bootloader..."
+mkdir -p /mnt/boot/syslinux
+
+# Copy syslinux files
+cp /usr/lib/syslinux/modules/bios/menu.c32 /mnt/boot/syslinux/ 2>/dev/null || true
+cp /usr/lib/syslinux/modules/bios/libutil.c32 /mnt/boot/syslinux/ 2>/dev/null || true
+cp /usr/lib/syslinux/modules/bios/libcom32.c32 /mnt/boot/syslinux/ 2>/dev/null || true
+
+# Create syslinux.cfg
+cat > /mnt/boot/syslinux/syslinux.cfg << 'SYSEOF'
+DEFAULT basic
+TIMEOUT 30
+PROMPT 0
+
+LABEL basic
+    MENU LABEL basic OS
+    LINUX /vmlinuz
+    APPEND root=REPLACE_ROOTPART rw quiet
+SYSEOF
+
+# Get UUID of root partition
+ROOTUUID=$(blkid -s UUID -o value "$ROOTPART" 2>/dev/null || echo "$ROOTPART")
+sed -i "s|REPLACE_ROOTPART|UUID=$ROOTUUID|" /mnt/boot/syslinux/syslinux.cfg
+
+# Install syslinux to MBR
+dd if=/usr/lib/syslinux/modules/bios/mbr.bin of="$TARGET" bs=440 count=1 2>/dev/null || true
+extlinux --install /mnt/boot/syslinux 2>/dev/null || {
+    echo "extlinux install failed, trying alternative..."
+    # Try dd-based approach
+    dd if=/usr/lib/ISOLINUX/isolinux.bin of="$TARGET" bs=440 count=1 2>/dev/null || true
+}
+
+echo ">>> Creating fstab..."
+cat > /mnt/root/etc/fstab << FSTABEOF
+UUID=$ROOTUUID / ext4 defaults 0 1
+proc /proc proc defaults 0 0
+sysfs /sys sysfs defaults 0 0
+FSTABEOF
+
+echo ">>> Unmounting..."
+umount /mnt/boot
+umount /mnt/root
+
+echo ""
+echo "=========================================="
+echo "   basic OS installed successfully!"
+echo "=========================================="
+echo ""
+echo "You can now reboot and boot from $TARGET."
+echo ""

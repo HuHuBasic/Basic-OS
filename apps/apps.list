@@ -1,0 +1,9 @@
+# basic OS App Center - Application List
+# Format: name|version|description|category|size|url
+hello|1.0.0|A simple hello world demo app|demo|1K|https://raw.githubusercontent.com/basic-os/apps/main/hello/hello-1.0.0.tar.gz
+busybox-extras|1.36.1|Extra BusyBox applets|system|2M|https://raw.githubusercontent.com/basic-os/apps/main/busybox-extras/busybox-extras-1.36.1.tar.gz
+dropbear|2022.83|Lightweight SSH server|network|500K|https://raw.githubusercontent.com/basic-os/apps/main/dropbear/dropbear-2022.83.tar.gz
+htop|3.3.0|Interactive process viewer|system|300K|https://raw.githubusercontent.com/basic-os/apps/main/htop/htop-3.3.0.tar.gz
+nano|7.2|Simple text editor|editor|700K|https://raw.githubusercontent.com/basic-os/apps/main/nano/nano-7.2.tar.gz
+lynx|2.9.0|Text-based web browser|network|2M|https://raw.githubusercontent.com/basic-os/apps/main/lynx/lynx-2.9.0.tar.gz
+python-mini|3.11.0|Minimal Python interpreter|dev|5M|https://raw.githubusercontent.com/basic-os/apps/main/python-mini/python-mini-3.11.0.tar.gz

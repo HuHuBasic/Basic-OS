@@ -1,0 +1,13 @@
+*.o
+*.ko
+*.mod
+*.mod.c
+*.swp
+*.swo
+*~
+Module.symvers
+modules.order
+.tmp_versions/
+linux-*/
+busybox-*/
+build/

@@ -1,0 +1,52 @@
+#!/bin/sh
+# ================================================
+#  basic OS - Init Script
+#  Linux Kernel 7.1.6 | BusyBox 1.36.1
+# ================================================
+
+echo ""
+echo "  =========================================="
+echo "     ___           _         ___  ____  "
+echo "    | _ ) __ _ __ (_)__ ___ / _ \/ ___\ "
+echo "    | _ \/ _\` / _|| / _/ __| (_) \___ \\ "
+echo "    |___/\__,_\__||_\__\___|\___/|____/ "
+echo "  =========================================="
+echo "          Linux Kernel 7.1.6"
+echo "          BusyBox 1.36.1"
+echo "  =========================================="
+echo ""
+
+# Mount essential filesystems
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mkdir -p /dev/pts
+mount -t devpts devpts /dev/pts
+mount -t tmpfs tmpfs /tmp
+mount -t tmpfs tmpfs /run
+
+# Setup hostname
+hostname basic
+
+# Check for installer mode
+if grep -q "installer" /proc/cmdline 2>/dev/null; then
+    echo ">>> basic OS Installer Mode <<<"
+    /usr/sbin/basic-install
+    echo "Installation complete. Rebooting..."
+    reboot -f
+fi
+
+# Check for rescue mode
+if grep -q "rescue" /proc/cmdline 2>/dev/null; then
+    echo ">>> basic OS Rescue Mode <<<"
+    echo "Type 'exit' to reboot."
+    exec /bin/sh
+fi
+
+# Normal boot
+echo ""
+echo "Welcome to basic OS!"
+echo "Type 'basic-appcenter' to open the App Center."
+echo ""
+
+exec /bin/sh
