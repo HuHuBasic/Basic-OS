@@ -279,6 +279,56 @@
     margin-top: 12px;
     word-break: break-all;
   }
+  /* Sponsor */
+  .sponsor-card {
+    background: linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #6366f1 100%);
+    border-radius: var(--radius);
+    padding: 48px 32px;
+    text-align: center;
+    max-width: 520px;
+    margin: 0 auto;
+    box-shadow: 0 8px 40px rgba(124,58,237,0.25);
+    position: relative;
+    overflow: hidden;
+  }
+  .sponsor-card::before {
+    content: '';
+    position: absolute;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: radial-gradient(circle at 30% 30%, rgba(255,255,255,0.08) 0%, transparent 50%),
+                radial-gradient(circle at 70% 70%, rgba(255,255,255,0.05) 0%, transparent 50%);
+  }
+  .sponsor-icon {
+    position: relative;
+    margin-bottom: 16px;
+  }
+  .sponsor-text {
+    position: relative;
+    color: rgba(255,255,255,0.8);
+    font-size: 1rem;
+    margin-bottom: 24px;
+  }
+  .afdian-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    background: #fff;
+    color: #7c3aed;
+    padding: 14px 32px;
+    border-radius: 100px;
+    font-weight: 700;
+    font-size: 1.05rem;
+    text-decoration: none;
+    transition: all .3s;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  }
+  .afdian-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 28px rgba(0,0,0,0.2);
+    color: #6d28d9;
+  }
   /* Footer */
   footer {
     border-top: 1px solid var(--border);
@@ -311,6 +361,9 @@
     <a href="#specs" lang="en">Specs</a>
     <a href="#specs" lang="zh-CN">规格</a>
     <a href="#specs" lang="zh-TW">規格</a>
+    <a href="#sponsor" lang="en">Sponsor</a>
+    <a href="#sponsor" lang="zh-CN">赞助</a>
+    <a href="#sponsor" lang="zh-TW">贊助</a>
     <a href="#download" class="download-btn" lang="en">Download</a>
     <a href="#download" class="download-btn" lang="zh-CN">下载</a>
     <a href="#download" class="download-btn" lang="zh-TW">下載</a>
@@ -499,6 +552,44 @@
   </div>
 </section>
 
+<!-- Sponsor -->
+<section id="sponsor">
+  <div class="section-title">
+    <h2 lang="en">Support this Project</h2>
+    <h2 lang="zh-CN">支持这个项目</h2>
+    <h2 lang="zh-TW">支持這個專案</h2>
+    <p lang="en">If you find basic OS useful, consider supporting its development on Afdian.</p>
+    <p lang="zh-CN">如果你觉得 basic OS 有用，可以在爱发电上支持它的开发。</p>
+    <p lang="zh-TW">如果你覺得 basic OS 有用，可以在愛發電上支持它的開發。</p>
+  </div>
+  <div class="sponsor-card">
+    <div class="sponsor-icon">
+      <svg viewBox="0 0 64 64" width="48" height="48" fill="none">
+        <ellipse cx="32" cy="30" rx="28" ry="22" fill="#fff" opacity="0.15"/>
+        <circle cx="32" cy="18" r="4" fill="#fff"/>
+        <path d="M14 44 Q32 48 50 44" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <circle cx="22" cy="34" r="1.5" fill="#fff" opacity="0.6"/>
+        <circle cx="42" cy="34" r="1.5" fill="#fff" opacity="0.6"/>
+      </svg>
+    </div>
+    <p lang="en" class="sponsor-text">Support basic OS development</p>
+    <p lang="zh-CN" class="sponsor-text">支持 basic OS 的开发</p>
+    <p lang="zh-TW" class="sponsor-text">支持 basic OS 的開發</p>
+    <a href="https://www.ifdian.net/a/Basic" target="_blank" class="afdian-btn">
+      <svg viewBox="0 0 64 64" width="22" height="22" fill="none">
+        <ellipse cx="32" cy="30" rx="26" ry="20" fill="#fff"/>
+        <circle cx="32" cy="18" r="4" fill="#946ce6"/>
+        <path d="M14 42 Q32 46 50 42" stroke="#fff" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+        <circle cx="22" cy="34" r="1.5" fill="#fff" opacity="0.6"/>
+        <circle cx="42" cy="34" r="1.5" fill="#fff" opacity="0.6"/>
+      </svg>
+      <span lang="en">Support me on Afdian</span>
+      <span lang="zh-CN">在爱发电支持我</span>
+      <span lang="zh-TW">在愛發電支持我</span>
+    </a>
+  </div>
+</section>
+
 <!-- Quick Start -->
 <section>
   <div class="section-title">
@@ -527,7 +618,9 @@ qemu-system-x86_64 -kernel vmlinuz-basic -initrd initramfs.cpio.gz -append "cons
   <p style="margin-top:8px;">
     <a href="https://github.com/HuHuBasic/Basic-OS" target="_blank">GitHub</a>
     &middot;
-    <a href="https://gitee.com/HuHuBasic/Basic-OS" target="_blank">Gitee</a>
+    <a href="https://gitee.com/basic-game/basic-os" target="_blank">Gitee</a>
+    &middot;
+    <a href="https://www.ifdian.net/a/Basic" target="_blank">爱发电</a>
   </p>
 </footer>
 
