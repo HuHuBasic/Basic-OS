@@ -1,20 +1,8 @@
 #!/bin/sh
 # ================================================
-#  basic OS - Init Script
+#  basic OS - Init Script (Graphical)
 #  Linux Kernel 7.1.6 | BusyBox 1.36.1
 # ================================================
-
-echo ""
-echo "  =========================================="
-echo "     ___           _         ___  ____  "
-echo "    | _ ) __ _ __ (_)__ ___ / _ \/ ___\ "
-echo "    | _ \/ _\` / _|| / _/ __| (_) \___ \\ "
-echo "    |___/\__,_\__||_\__\___|\___/|____/ "
-echo "  =========================================="
-echo "          Linux Kernel 7.1.6"
-echo "          BusyBox 1.36.1"
-echo "  =========================================="
-echo ""
 
 # Mount essential filesystems
 mount -t proc proc /proc
@@ -28,25 +16,51 @@ mount -t tmpfs tmpfs /run
 # Setup hostname
 hostname basic
 
-# Check for installer mode
+# ---- Installer Mode ----
 if grep -q "installer" /proc/cmdline 2>/dev/null; then
-    echo ">>> basic OS Installer Mode <<<"
+    clear
+    export TERM=linux
     /usr/sbin/basic-install
-    echo "Installation complete. Rebooting..."
-    reboot -f
+    /sbin/reboot -f
 fi
 
-# Check for rescue mode
+# ---- Rescue Mode ----
 if grep -q "rescue" /proc/cmdline 2>/dev/null; then
+    clear
     echo ">>> basic OS Rescue Mode <<<"
     echo "Type 'exit' to reboot."
     exec /bin/sh
 fi
 
-# Normal boot
-echo ""
-echo "Welcome to basic OS!"
-echo "Type 'basic-appcenter' to open the App Center."
-echo ""
+# ---- Text Mode (no desktop) ----
+if grep -q "text" /proc/cmdline 2>/dev/null; then
+    clear
+    echo ""
+    echo "  =========================================="
+    echo "     ___           _         ___  ____  "
+    echo "    | _ ) __ _ __ (_)__ ___ / _ \\/ ___\\ "
+    echo "    | _ \\/ _\` / _|| / _/ __| (_) \\___ \\ "
+    echo "    |___/\\__,_\\__||_\\__\\___|\\___/|____/ "
+    echo "  =========================================="
+    echo "          Linux Kernel 7.1.6"
+    echo "  =========================================="
+    echo ""
+    echo "Type 'basic-appcenter' or 'basic-install'"
+    echo "Type 'desktop' to start graphical desktop"
+    echo ""
+    exec /bin/sh
+fi
 
+# ---- Normal boot: try framebuffer desktop ----
+if [ -c /dev/fb0 ]; then
+    echo "Starting basic OS Desktop..."
+    /usr/bin/basic-desktop
+    echo "Desktop exited. Starting shell..."
+    exec /bin/sh
+fi
+
+# ---- Fallback to shell ----
+clear
+echo "Welcome to basic OS!"
+echo "Type 'basic-appcenter' or 'basic-install'"
 exec /bin/sh

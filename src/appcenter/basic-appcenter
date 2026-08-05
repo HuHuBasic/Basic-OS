@@ -1,205 +1,214 @@
 #!/bin/sh
 # ================================================
-#  basic OS - App Center (应用中心)
-#  Simple package manager for basic OS
+#  basic OS - App Center (dialog GUI)
 # ================================================
 
+export TERM=linux
+DIALOG="/usr/bin/dialog"
 APP_DIR="/usr/share/basic-apps"
 APP_LIST="$APP_DIR/apps.list"
 APP_DATA="$APP_DIR/apps"
-APP_REPO="https://raw.githubusercontent.com/basic-os/apps/main"
+BACKTITLE="basic OS App Center"
 
-# Colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m'
-
-# Ensure app directory exists
 mkdir -p "$APP_DIR" "$APP_DATA"
 
-# Initialize app list
+# Init app list
 if [ ! -f "$APP_LIST" ]; then
     cat > "$APP_LIST" << 'EOF'
-# basic OS App Center - Application List
-# Format: name|version|description|category|size|url
-hello|1.0.0|A simple hello world program|demo|4K|${APP_REPO}/hello/hello-1.0.0.tar.gz
-busybox-extras|1.36.1|Extra BusyBox applets|system|2M|${APP_REPO}/busybox-extras/busybox-extras-1.36.1.tar.gz
-dropbear|2022.83|Lightweight SSH server|network|500K|${APP_REPO}/dropbear/dropbear-2022.83.tar.gz
-htop|3.3.0|Interactive process viewer|system|300K|${APP_REPO}/htop/htop-3.3.0.tar.gz
-nano|7.2|Simple text editor|editor|700K|${APP_REPO}/nano/nano-7.2.tar.gz
-lynx|2.9.0|Text-based web browser|network|2M|${APP_REPO}/lynx/lynx-2.9.0.tar.gz
-python-mini|3.11.0|Minimal Python interpreter|dev|5M|${APP_REPO}/python-mini/python-mini-3.11.0.tar.gz
+# basic OS App Center
+# name|version|description|category|size|url
+hello|1.0.0|A simple hello world demo|Demo|1K|https://raw.githubusercontent.com/basic-os/apps/main/hello/hello-1.0.0.tar.gz
+busybox-extras|1.36.1|Extra BusyBox applets|System|2M|https://raw.githubusercontent.com/basic-os/apps/main/busybox-extras/busybox-extras-1.36.1.tar.gz
+dropbear|2022.83|Lightweight SSH server|Network|500K|https://raw.githubusercontent.com/basic-os/apps/main/dropbear/dropbear-2022.83.tar.gz
+htop|3.3.0|Interactive process viewer|System|300K|https://raw.githubusercontent.com/basic-os/apps/main/htop/htop-3.3.0.tar.gz
+nano|7.2|Simple text editor|Editor|700K|https://raw.githubusercontent.com/basic-os/apps/main/nano/nano-7.2.tar.gz
+lynx|2.9.0|Text-based web browser|Network|2M|https://raw.githubusercontent.com/basic-os/apps/main/lynx/lynx-2.9.0.tar.gz
+python-mini|3.11.0|Minimal Python interpreter|Dev|5M|https://raw.githubusercontent.com/basic-os/apps/main/python-mini/python-mini-3.11.0.tar.gz
 EOF
 fi
 
 # ====== Functions ======
 
-show_banner() {
-    echo ""
-    echo -e "${CYAN}  ==========================================${NC}"
-    echo -e "${CYAN}    basic OS App Center (应用中心)${NC}"
-    echo -e "${CYAN}  ==========================================${NC}"
-    echo ""
-}
+show_main_menu() {
+    while true; do
+        CHOICE=$($DIALOG --backtitle "$BACKTITLE" --title "App Center" \
+          --menu "\nWelcome to basic OS App Center\n\nChoose an action:" 18 55 8 \
+          "1" "Browse all available apps" \
+          "2" "Install an app" \
+          "3" "Remove an installed app" \
+          "4" "View installed apps" \
+          "5" "Search for apps" \
+          "6" "Update app list" \
+          "7" "About basic OS" \
+          "8" "Exit" 2>&1 >/dev/tty)
 
-list_apps() {
-    echo -e "${BLUE}Available Applications:${NC}"
-    echo ""
-    printf "  ${YELLOW}%-20s %-10s %-12s %s${NC}\n" "NAME" "VERSION" "CATEGORY" "DESCRIPTION"
-    echo "  -----------------------------------------------------------------"
-    grep -v '^#' "$APP_LIST" | grep -v '^$' | while IFS='|' read -r name version desc category size url; do
-        installed=""
-        if [ -f "$APP_DATA/$name.installed" ]; then
-            installed="${GREEN}[installed]${NC}"
-        else
-            installed="          "
-        fi
-        printf "  %-20s %-10s %-12s %s %s\n" "$name" "$version" "$category" "$desc" "$installed"
+        [ $? -ne 0 ] && break
+
+        case "$CHOICE" in
+            1) browse_apps ;;
+            2) install_app_dialog ;;
+            3) remove_app_dialog ;;
+            4) show_installed ;;
+            5) search_apps ;;
+            6) update_list ;;
+            7) show_about ;;
+            8) break ;;
+            *) break ;;
+        esac
     done
-    echo ""
+    clear
 }
 
-install_app() {
-    APP="$1"
-    LINE=$(grep "^$APP|" "$APP_LIST" 2>/dev/null)
-    
-    if [ -z "$LINE" ]; then
-        echo -e "${RED}Error: '$APP' not found in app store.${NC}"
-        echo "Use 'basic-appcenter list' to see available apps."
-        return 1
+browse_apps() {
+    local applist=""
+    local idx=1
+    while IFS='|' read -r name version desc category size url; do
+        [ -z "$name" ] && continue
+        [ "${name:0:1}" = "#" ] && continue
+        local mark=""
+        [ -f "$APP_DATA/$name.installed" ] && mark="[INSTALLED]"
+        applist="$applist \"$idx\" \"$name  $version  $mark\" \"$desc  ($category, $size)\""
+        idx=$((idx + 1))
+    done < "$APP_LIST"
+
+    if [ -z "$applist" ]; then
+        $DIALOG --backtitle "$BACKTITLE" --title "Browse" --msgbox "No apps available." 6 40
+        return
     fi
-    
-    NAME=$(echo "$LINE" | cut -d'|' -f1)
-    VERSION=$(echo "$LINE" | cut -d'|' -f2)
-    DESC=$(echo "$LINE" | cut -d'|' -f3)
-    URL=$(echo "$LINE" | cut -d'|' -f6)
-    
-    if [ -f "$APP_DATA/$NAME.installed" ]; then
-        echo -e "${YELLOW}$NAME is already installed.${NC}"
-        echo -n "Reinstall? [y/N]: "
-        read answer
-        [ "$answer" != "y" ] && [ "$answer" != "Y" ] && return 0
+
+    eval $DIALOG --backtitle \"$BACKTITLE\" --title \"Browse Apps\" \
+      --menu \"\\nAvailable applications:\\n\" 20 65 12 $applist 2>&1 >/dev/tty
+}
+
+install_app_dialog() {
+    local names=""
+    while IFS='|' read -r name version desc category size url; do
+        [ -z "$name" ] && continue
+        [ "${name:0:1}" = "#" ] && continue
+        [ -f "$APP_DATA/$name.installed" ] && continue
+        names="$names \"$name\" \"$desc ($category, $size)\""
+    done < "$APP_LIST"
+
+    if [ -z "$names" ]; then
+        $DIALOG --backtitle "$BACKTITLE" --title "Install" --msgbox "All apps are already installed!" 6 45
+        return
     fi
-    
-    echo -e "${GREEN}Installing $NAME $VERSION...${NC}"
-    echo "  $DESC"
-    
-    mkdir -p "/tmp/app-install-$NAME"
-    cd "/tmp/app-install-$NAME"
-    
-    if wget -q -O "$NAME.tar.gz" "$URL" 2>/dev/null; then
-        tar xzf "$NAME.tar.gz" 2>/dev/null
-        if [ -d "rootfs" ]; then
-            cp -a rootfs/* / 2>/dev/null
-        fi
-        if [ -f "install.sh" ]; then
-            sh install.sh
-        fi
-        echo "$VERSION" > "$APP_DATA/$NAME.installed"
-        echo -e "${GREEN}$NAME $VERSION installed successfully!${NC}"
+
+    APP=$(eval $DIALOG --backtitle \"$BACKTITLE\" --title \"Install App\" \
+      --menu \"\\nSelect an app to install:\\n\" 18 60 10 $names 2>&1 >/dev/tty)
+
+    [ -z "$APP" ] && return
+
+    # Get URL
+    URL=$(grep "^$APP|" "$APP_LIST" | cut -d'|' -f6)
+    VER=$(grep "^$APP|" "$APP_LIST" | cut -d'|' -f2)
+
+    $DIALOG --backtitle "$BACKTITLE" --title "Installing" \
+      --gauge "\nDownloading and installing $APP $VER...\n" 6 50 0 &
+
+    mkdir -p "/tmp/app-install-$APP"
+    cd "/tmp/app-install-$APP"
+
+    if wget -q -O "$APP.tar.gz" "$URL" 2>/dev/null; then
+        tar xzf "$APP.tar.gz" 2>/dev/null
+        [ -d "rootfs" ] && cp -a rootfs/* / 2>/dev/null
+        [ -f "install.sh" ] && sh install.sh
+        echo "$VER" > "$APP_DATA/$APP.installed"
+        wait
+        $DIALOG --backtitle "$BACKTITLE" --title "Success" \
+          --msgbox "$APP $VER installed successfully!" 6 50
     else
-        echo -e "${RED}Failed to download $NAME.${NC}"
-        echo "Check your network connection or try again later."
+        wait
+        $DIALOG --backtitle "$BACKTITLE" --title "Error" \
+          --msgbox "Failed to download $APP.\nCheck network connection." 7 45
     fi
-    
+
     cd /
-    rm -rf "/tmp/app-install-$NAME"
+    rm -rf "/tmp/app-install-$APP"
 }
 
-remove_app() {
-    APP="$1"
-    
-    if [ ! -f "$APP_DATA/$APP.installed" ]; then
-        echo -e "${YELLOW}$APP is not installed.${NC}"
-        return 1
+remove_app_dialog() {
+    local names=""
+    for f in "$APP_DATA"/*.installed; do
+        [ -f "$f" ] || continue
+        local name=$(basename "$f" .installed)
+        names="$names \"$name\" \"\""
+    done
+
+    if [ -z "$names" ]; then
+        $DIALOG --backtitle "$BACKTITLE" --title "Remove" --msgbox "No apps installed." 6 40
+        return
     fi
-    
-    echo -n "Remove $APP? [y/N]: "
-    read answer
-    if [ "$answer" != "y" ] && [ "$answer" != "Y" ]; then
-        return 0
+
+    APP=$(eval $DIALOG --backtitle \"$BACKTITLE\" --title \"Remove App\" \
+      --menu \"\\nSelect an app to remove:\\n\" 14 45 8 $names 2>&1 >/dev/tty)
+
+    [ -z "$APP" ] && return
+
+    $DIALOG --backtitle "$BACKTITLE" --title "Confirm" \
+      --yesno "Remove $APP?" 6 35
+    [ $? -eq 0 ] && rm -f "$APP_DATA/$APP.installed"
+}
+
+show_installed() {
+    local text=""
+    for f in "$APP_DATA"/*.installed; do
+        [ -f "$f" ] || continue
+        local name=$(basename "$f" .installed)
+        local ver=$(cat "$f")
+        text="$text\n  $name  v$ver"
+    done
+
+    if [ -z "$text" ]; then
+        text="\n  No apps installed."
     fi
-    
-    rm -f "$APP_DATA/$APP.installed"
-    echo -e "${GREEN}$APP removed.${NC}"
+
+    $DIALOG --backtitle "$BACKTITLE" --title "Installed Apps" \
+      --msgbox "$text" 14 45
 }
 
 search_apps() {
-    QUERY="$1"
-    echo -e "${BLUE}Search results for '$QUERY':${NC}"
-    echo ""
-    grep -v '^#' "$APP_LIST" | grep -v '^$' | grep -i "$QUERY" | while IFS='|' read -r name version desc category size url; do
-        printf "  ${YELLOW}%-20s${NC} %-10s ${CYAN}%-12s${NC} %s\n" "$name" "$version" "$category" "$desc"
+    QUERY=$($DIALOG --backtitle "$BACKTITLE" --title "Search" \
+      --inputbox "Enter search keyword:" 8 40 2>&1 >/dev/tty)
+
+    [ -z "$QUERY" ] && return
+
+    local results=""
+    grep -i "$QUERY" "$APP_LIST" | grep -v '^#' | while IFS='|' read -r name version desc category size url; do
+        [ -z "$name" ] && continue
+        local mark=""
+        [ -f "$APP_DATA/$name.installed" ] && mark=" [INSTALLED]"
+        results="$results\n  $name  v$version  ($category)$mark\n    $desc\n"
     done
-    echo ""
+
+    if [ -z "$results" ]; then
+        $DIALOG --backtitle "$BACKTITLE" --title "Search" \
+          --msgbox "No results for '$QUERY'." 6 40
+    else
+        echo "$results" > /tmp/search-results.txt
+        $DIALOG --backtitle "$BACKTITLE" --title "Search Results" \
+          --textbox /tmp/search-results.txt 16 60
+        rm -f /tmp/search-results.txt
+    fi
 }
 
-show_help() {
-    echo "Usage: basic-appcenter [command]"
-    echo ""
-    echo "Commands:"
-    echo "  list | ls           List all available apps"
-    echo "  install <name>       Install an app"
-    echo "  remove <name>        Remove an installed app"
-    echo "  search <keyword>     Search for apps"
-    echo "  installed            List installed apps"
-    echo "  update               Update app list from remote"
-    echo "  help                 Show this help"
-    echo ""
+update_list() {
+    $DIALOG --backtitle "$BACKTITLE" --title "Update" \
+      --gauge "Updating app list..." 6 50 0 &
+    if wget -q -O "$APP_LIST.new" "https://raw.githubusercontent.com/basic-os/apps/main/apps.list" 2>/dev/null; then
+        mv "$APP_LIST.new" "$APP_LIST"
+        wait
+        $DIALOG --backtitle "$BACKTITLE" --title "Update" --msgbox "App list updated!" 6 40
+    else
+        wait
+        $DIALOG --backtitle "$BACKTITLE" --title "Update" --msgbox "Update failed.\nCheck network." 7 40
+    fi
+}
+
+show_about() {
+    $DIALOG --backtitle "$BACKTITLE" --title "About basic OS" \
+      --msgbox "\nbasic OS v1.0\n\nLinux Kernel 7.1.6\nBusyBox 1.36.1\n\nA minimal Linux operating system\nwith graphical installer and\napp center.\n\nhttps://github.com/HuHuBasic/Basic-OS" 16 55
 }
 
 # ====== Main ======
-
-COMMAND="${1:-list}"
-
-case "$COMMAND" in
-    list|ls)
-        show_banner
-        list_apps
-        ;;
-    install|i)
-        [ -z "$2" ] && { echo "Usage: basic-appcenter install <name>"; exit 1; }
-        show_banner
-        install_app "$2"
-        ;;
-    remove|rm|uninstall)
-        [ -z "$2" ] && { echo "Usage: basic-appcenter remove <name>"; exit 1; }
-        show_banner
-        remove_app "$2"
-        ;;
-    search|find)
-        [ -z "$2" ] && { echo "Usage: basic-appcenter search <keyword>"; exit 1; }
-        show_banner
-        search_apps "$2"
-        ;;
-    installed)
-        show_banner
-        echo -e "${BLUE}Installed apps:${NC}"
-        echo ""
-        for f in "$APP_DATA"/*.installed; do
-            [ -f "$f" ] || continue
-            name=$(basename "$f" .installed)
-            ver=$(cat "$f")
-            printf "  ${GREEN}%-20s${NC} %s\n" "$name" "$ver"
-        done
-        echo ""
-        ;;
-    update)
-        echo "Updating app list..."
-        wget -q -O "$APP_LIST.new" "$APP_REPO/apps.list" 2>/dev/null && \
-            mv "$APP_LIST.new" "$APP_LIST" && \
-            echo -e "${GREEN}App list updated!${NC}" || \
-            echo -e "${RED}Failed to update.${NC}"
-        ;;
-    help|--help|-h)
-        show_banner
-        show_help
-        ;;
-    *)
-        show_banner
-        show_help
-        ;;
-esac
+show_main_menu
