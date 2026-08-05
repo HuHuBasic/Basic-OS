@@ -295,11 +295,8 @@
     section { padding: 60px 16px; }
     .download-card { padding: 28px; }
   }
-  /* Hidden by lang */
-  [lang] { display: none; }
-  body[data-lang="en"] [lang="en"] { display: revert; }
-  body[data-lang="zh-CN"] [lang="zh-CN"] { display: revert; }
-  body[data-lang="zh-TW"] [lang="zh-TW"] { display: revert; }
+  /* Lang visibility controlled by JS */
+  .lang-hidden { display: none !important; }
 </style>
 </head>
 <body data-lang="en">
@@ -535,15 +532,31 @@ qemu-system-x86_64 -kernel vmlinuz-basic -initrd initramfs.cpio.gz -append "cons
 </footer>
 
 <script>
-function setLang(lang) {
-  document.body.setAttribute('data-lang', lang);
-  document.querySelectorAll('.lang-switch button').forEach(b => b.classList.remove('active'));
-  document.getElementById('btn-' + lang).classList.add('active');
-  localStorage.setItem('basic-os-lang', lang);
-}
-// Init
-var saved = localStorage.getItem('basic-os-lang') || 'en';
-setLang(saved);
+(function() {
+  var currentLang = 'en';
+  window.setLang = function(lang) {
+    if (lang === currentLang) return;
+    currentLang = lang;
+    document.body.setAttribute('data-lang', lang);
+    document.querySelectorAll('[lang]').forEach(function(el) {
+      if (el.getAttribute('lang') === lang) {
+        el.classList.remove('lang-hidden');
+      } else {
+        el.classList.add('lang-hidden');
+      }
+    });
+    document.querySelectorAll('.lang-switch button').forEach(function(b) {
+      b.classList.remove('active');
+    });
+    var btn = document.getElementById('btn-' + lang);
+    if (btn) btn.classList.add('active');
+    try { localStorage.setItem('basic-os-lang', lang); } catch(e) {}
+  };
+  // Init: hide non-current lang on page load
+  var saved = 'en';
+  try { saved = localStorage.getItem('basic-os-lang') || 'en'; } catch(e) {}
+  setLang(saved);
+})();
 </script>
 </body>
 </html>
