@@ -1,0 +1,125 @@
+#!/bin/sh
+# ================================================
+#  basic OS - Beta Init Script
+#  Requires activation code before booting
+#  Linux Kernel 7.1.6 | BusyBox 1.36.1
+# ================================================
+
+# Mount essential filesystems
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mkdir -p /dev/pts
+mount -t devpts devpts /dev/pts
+mount -t tmpfs tmpfs /tmp
+mount -t tmpfs tmpfs /run
+
+# Setup hostname
+hostname basic
+
+# ---- Load i18n ----
+if [ -f /etc/basic-os/locale/i18n.sh ]; then
+    . /etc/basic-os/locale/i18n.sh
+    load_lang
+    _() {
+        local key="$1"
+        shift
+        local val
+        eval "val=\${$key:-$key}"
+        if [ $# -gt 0 ]; then
+            printf "$val" "$@"
+        else
+            echo "$val"
+        fi
+    }
+else
+    _() { echo "$1"; }
+fi
+
+# ---- Installer Mode (no activation check) ----
+if grep -q "installer" /proc/cmdline 2>/dev/null; then
+    clear
+    export TERM=linux
+    /usr/sbin/basic-install
+    /sbin/reboot -f
+fi
+
+# ---- Rescue Mode (no activation check) ----
+if grep -q "rescue" /proc/cmdline 2>/dev/null; then
+    clear
+    echo ">>> $(_ I_RESCUE_MODE) <<<"
+    echo "$(_ I_RESCUE_PROMPT)"
+    exec /bin/sh
+fi
+
+# ---- Activation Check ----
+clear
+echo ""
+echo "  =========================================="
+echo "     ___           _         ___  ____  "
+echo "    | _ ) __ _ __ (_)__ ___ / _ \\/ ___\\ "
+echo "    | _ \\/ _\` / _|| / _/ __| (_) \\___ \\ "
+echo "    |___/\\__,_\\__||_\\__\\___|\\___/|____/ "
+echo "  =========================================="
+echo "          Linux Kernel 7.1.6"
+echo "  =========================================="
+echo ""
+echo "  *** BETA VERSION - ACTIVATION REQUIRED ***"
+echo ""
+echo "  This is the internal testing (beta) version."
+echo "  An activation code is required to continue."
+echo "  Get your code at: https://www.ifdian.net/a/Basic"
+echo ""
+
+# Run activation
+if [ -f /usr/sbin/activate ]; then
+    /usr/sbin/activate
+
+    if [ $? -ne 0 ]; then
+        echo ""
+        echo "Activation failed. System will reboot in 10 seconds..."
+        sleep 10
+        /sbin/reboot -f
+    fi
+else
+    echo "ERROR: Activation system not found."
+    echo "Falling back to shell..."
+    exec /bin/sh
+fi
+
+# ---- Activated: continue normal boot ----
+clear
+echo ""
+echo "  =========================================="
+echo "     ___           _         ___  ____  "
+echo "    | _ ) __ _ __ (_)__ ___ / _ \\/ ___\\ "
+echo "    | _ \\/ _\` / _|| / _/ __| (_) \\___ \\ "
+echo "    |___/\\__,_\\__||_\\__\\___|\\___/|____/ "
+echo "  =========================================="
+echo "          Linux Kernel 7.1.6 BETA"
+echo "  =========================================="
+echo ""
+echo "Activation verified. Starting basic OS..."
+echo ""
+
+# ---- Text Mode ----
+if grep -q "text" /proc/cmdline 2>/dev/null; then
+    echo "$(_ I_TEXT_MODE_HINT)"
+    echo "$(_ I_TEXT_MODE_DESKTOP_HINT)"
+    echo ""
+    exec /bin/sh
+fi
+
+# ---- Normal boot: try framebuffer desktop ----
+if [ -c /dev/fb0 ]; then
+    echo "$(_ I_STARTING_DESKTOP)"
+    /usr/bin/basic-desktop
+    echo "$(_ I_DESKTOP_EXITED)"
+    exec /bin/sh
+fi
+
+# ---- Fallback to shell ----
+clear
+echo "$(_ I_WELCOME)"
+echo "$(_ I_TEXT_MODE_HINT)"
+exec /bin/sh

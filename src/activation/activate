@@ -1,0 +1,179 @@
+#!/bin/sh
+# ================================================
+#  basic OS - Activation System (activate)
+#  Validates activation codes against SHA256 database
+#  Usage: activate [code]
+#         activate --check   (check if already activated)
+#         activate --status  (show activation status)
+# ================================================
+
+CODES_DB="/etc/basic-os/codes.db"
+ACTIVATION_FILE="/etc/basic-os/activated"
+ACTIVATED_CODE="/etc/basic-os/activated-code"
+
+# ---- Load i18n (if available) ----
+if [ -f /etc/basic-os/locale/i18n.sh ]; then
+    . /etc/basic-os/locale/i18n.sh
+    load_lang
+    _() {
+        local key="$1"
+        shift
+        local val
+        eval "val=\${$key:-$key}"
+        if [ $# -gt 0 ]; then
+            printf "$val" "$@"
+        else
+            echo "$val"
+        fi
+    }
+else
+    _() { echo "$1"; }
+fi
+
+# ---- Activation strings ----
+ACT_TITLE="basic OS Activation"
+ACT_ENTER_CODE="Enter activation code (format: XXXX-XXXX-XXXX-XXXX):"
+ACT_VALIDATING="Validating activation code..."
+ACT_SUCCESS="Activation successful! Welcome to basic OS Beta."
+ACT_INVALID="Invalid activation code. Please try again."
+ACT_ALREADY="basic OS is already activated."
+ACT_NOT_ACTIVATED="basic OS is not activated."
+ACT_ATTEMPTS_LEFT="Attempts remaining: %d"
+ACT_TOO_MANY="Too many failed attempts. Please reboot and try again."
+ACT_CODE_FORMAT="Code format: XXXX-XXXX-XXXX-XXXX (letters and numbers, no 0/O/1/I)"
+ACT_BETA_WARNING="This is basic OS BETA version. Activation required."
+ACT_CONTACT="Contact: https://www.ifdian.net/a/Basic"
+
+MAX_ATTEMPTS=5
+
+# ---- Check if already activated ----
+is_activated() {
+    [ -f "$ACTIVATION_FILE" ]
+}
+
+# ---- Show status ----
+show_status() {
+    if is_activated; then
+        echo "$(_ ACT_TITLE)"
+        if [ -f "$ACTIVATED_CODE" ]; then
+            echo "Status: Activated"
+            echo "Code:   $(cat "$ACTIVATED_CODE")"
+        else
+            echo "Status: Activated"
+        fi
+    else
+        echo "$(_ ACT_NOT_ACTIVATED)"
+    fi
+}
+
+# ---- Validate code ----
+validate_code() {
+    local code="$1"
+
+    # Format check: XXXX-XXXX-XXXX-XXXX
+    echo "$code" | grep -qE '^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$' || return 1
+
+    # SHA256 check
+    if [ -f "$CODES_DB" ]; then
+        local hash=$(echo -n "$code" | sha256sum | cut -d' ' -f1)
+        grep -q "^$hash$" "$CODES_DB" 2>/dev/null && return 0
+    fi
+
+    return 1
+}
+
+# ---- Activate ----
+do_activate() {
+    local code="$1"
+
+    echo ""
+    echo "============================================"
+    echo "  $(_ ACT_TITLE)"
+    echo "============================================"
+
+    if is_activated; then
+        echo ""
+        echo "$(_ ACT_ALREADY)"
+        return 0
+    fi
+
+    # If code provided as argument, validate it
+    if [ -n "$code" ]; then
+        echo ""
+        echo "$(_ ACT_VALIDATING)"
+        if validate_code "$code"; then
+            date +%s > "$ACTIVATION_FILE"
+            echo "$code" > "$ACTIVATED_CODE"
+            echo ""
+            echo "$(_ ACT_SUCCESS)"
+            return 0
+        else
+            echo ""
+            echo "$(_ ACT_INVALID)"
+            return 1
+        fi
+    fi
+
+    # Interactive mode
+    echo ""
+    echo "$(_ ACT_BETA_WARNING)"
+    echo "$(_ ACT_CONTACT)"
+    echo ""
+    echo "$(_ ACT_CODE_FORMAT)"
+    echo ""
+
+    local attempts=0
+    while [ $attempts -lt $MAX_ATTEMPTS ]; do
+        printf "%s " "$(_ ACT_ENTER_CODE)"
+        read -r input
+
+        if [ -z "$input" ]; then
+            attempts=$((attempts + 1))
+            continue
+        fi
+
+        echo "$(_ ACT_VALIDATING)"
+
+        if validate_code "$input"; then
+            date +%s > "$ACTIVATION_FILE"
+            echo "$input" > "$ACTIVATED_CODE"
+            echo ""
+            echo "============================================"
+            echo "$(_ ACT_SUCCESS)"
+            echo "============================================"
+            return 0
+        fi
+
+        echo "$(_ ACT_INVALID)"
+        attempts=$((attempts + 1))
+        remaining=$((MAX_ATTEMPTS - attempts))
+        echo "$(_ ACT_ATTEMPTS_LEFT $remaining)"
+        echo ""
+    done
+
+    echo "$(_ ACT_TOO_MANY)"
+    return 1
+}
+
+# ====== Main ======
+
+case "${1:-}" in
+    --check|-c)
+        is_activated && exit 0 || exit 1
+        ;;
+    --status|-s)
+        show_status
+        ;;
+    --help|-h)
+        echo "activate - basic OS Activation System"
+        echo ""
+        echo "Usage: activate [code]"
+        echo "       activate --check     Check if activated"
+        echo "       activate --status    Show activation status"
+        echo ""
+        echo "Without arguments, enters interactive activation mode."
+        ;;
+    *)
+        do_activate "$1"
+        ;;
+esac

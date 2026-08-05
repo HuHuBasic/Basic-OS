@@ -250,14 +250,60 @@
   .spec-item .label { color: var(--text2); font-size: .8rem; text-transform: uppercase; letter-spacing: .05em; }
   .spec-item .value { font-size: 1.1rem; font-weight: 600; margin-top: 4px; }
   /* Download Section */
+  .download-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 24px;
+    max-width: 900px;
+    margin: 0 auto;
+  }
   .download-card {
     background: linear-gradient(135deg, var(--bg2), var(--bg3));
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 48px;
+    padding: 40px 32px;
     text-align: center;
-    max-width: 600px;
-    margin: 0 auto;
+    position: relative;
+    transition: all .3s;
+  }
+  .download-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+  }
+  .download-card.beta {
+    border-color: rgba(168,85,247,0.4);
+    background: linear-gradient(135deg, var(--bg2), rgba(139,92,246,0.08));
+  }
+  .download-card.beta:hover {
+    border-color: #a855f7;
+  }
+  .download-card .edition-badge {
+    display: inline-block;
+    padding: 4px 14px;
+    border-radius: 100px;
+    font-size: .75rem;
+    font-weight: 700;
+    letter-spacing: .03em;
+    margin-bottom: 16px;
+  }
+  .download-card .edition-badge.stable-badge {
+    background: rgba(34,197,94,0.15);
+    color: var(--green);
+    border: 1px solid rgba(34,197,94,0.3);
+  }
+  .download-card .edition-badge.beta-badge {
+    background: rgba(168,85,247,0.15);
+    color: #a855f7;
+    border: 1px solid rgba(168,85,247,0.3);
+  }
+  .download-card h3 {
+    font-size: 1.4rem;
+    margin-bottom: 4px;
+  }
+  .download-card .edition-subtitle {
+    font-size: .85rem;
+    color: var(--text2);
+    margin-bottom: 16px;
   }
   .download-card .file-info {
     display: flex;
@@ -278,6 +324,19 @@
     display: inline-block;
     margin-top: 12px;
     word-break: break-all;
+  }
+  .download-card .activation-info {
+    background: rgba(168,85,247,0.08);
+    border: 1px dashed rgba(168,85,247,0.25);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-top: 16px;
+    font-size: .82rem;
+    color: #c4b5fd;
+    line-height: 1.5;
+  }
+  .download-card .activation-info strong {
+    color: #a78bfa;
   }
   /* Sponsor */
   .sponsor-card {
@@ -379,14 +438,14 @@
 <section class="hero">
   <div class="hero-badge">
     <span class="dot"></span>
-    <span lang="en">Linux Kernel 7.1.6 — Stable</span>
-    <span lang="zh-CN">Linux 内核 7.1.6 — 稳定版</span>
-    <span lang="zh-TW">Linux 核心 7.1.6 — 穩定版</span>
+    <span lang="en">Linux Kernel 7.1.6 — Stable &amp; Beta Available</span>
+    <span lang="zh-CN">Linux 内核 7.1.6 — 正式版 &amp; 内测版</span>
+    <span lang="zh-TW">Linux 核心 7.1.6 — 正式版 &amp; 內測版</span>
   </div>
   <h1>basic OS</h1>
-  <p lang="en">A minimal, fast, and beautiful Linux operating system. Built from scratch with framebuffer desktop, graphical installer, and app center.</p>
-  <p lang="zh-CN">一个极简、快速、美观的 Linux 操作系统。从零构建，内置 framebuffer 桌面、图形化安装程序和应用中心。</p>
-  <p lang="zh-TW">一個極簡、快速、美觀的 Linux 作業系統。從零構建，內建 framebuffer 桌面、圖形化安裝程式和應用中心。</p>
+  <p lang="en">A minimal, fast, and beautiful Linux operating system. Built from scratch with framebuffer desktop, graphical installer, and app center. Beta version available with activation code.</p>
+  <p lang="zh-CN">一个极简、快速、美观的 Linux 操作系统。从零构建，内置 framebuffer 桌面、图形化安装程序和应用中心。内测版支持激活码机制。</p>
+  <p lang="zh-TW">一個極簡、快速、美觀的 Linux 作業系統。從零構建，內建 framebuffer 桌面、圖形化安裝程式和應用中心。內測版支援啟用碼機制。</p>
   <div class="hero-buttons">
     <a href="#download" class="btn btn-primary" lang="en">Download ISO</a>
     <a href="#download" class="btn btn-primary" lang="zh-CN">下载 ISO</a>
@@ -530,25 +589,65 @@
     <h2 lang="en">Download basic OS</h2>
     <h2 lang="zh-CN">下载 basic OS</h2>
     <h2 lang="zh-TW">下載 basic OS</h2>
+    <p lang="en">Choose between stable release and internal testing beta</p>
+    <p lang="zh-CN">选择正式版或内测版</p>
+    <p lang="zh-TW">選擇正式版或內測版</p>
   </div>
-  <div class="download-card">
-    <h3>basic-os.iso</h3>
-    <div class="file-info">
-      <span lang="en">Version 1.0.0</span>
-      <span lang="zh-CN">版本 1.0.0</span>
-      <span lang="zh-TW">版本 1.0.0</span>
-      &middot;
-      <span>~14 MB</span>
-      &middot;
-      <span>x86_64</span>
+  <div class="download-grid">
+    <!-- Stable -->
+    <div class="download-card">
+      <span class="edition-badge stable-badge" lang="en">STABLE</span>
+      <span class="edition-badge stable-badge" lang="zh-CN">正式版</span>
+      <span class="edition-badge stable-badge" lang="zh-TW">正式版</span>
+      <h3>basic OS</h3>
+      <div class="edition-subtitle" lang="en">Public Release</div>
+      <div class="edition-subtitle" lang="zh-CN">公开发布版</div>
+      <div class="edition-subtitle" lang="zh-TW">公開發布版</div>
+      <div class="file-info">
+        <span lang="en">Version 1.0.0</span>
+        <span lang="zh-CN">版本 1.0.0</span>
+        <span lang="zh-TW">版本 1.0.0</span>
+        &middot;
+        <span>~14 MB</span>
+        &middot;
+        <span>x86_64</span>
+      </div>
+      <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os-stable.iso" class="btn btn-primary" style="margin-top:12px;" lang="en">Download Stable</a>
+      <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os-stable.iso" class="btn btn-primary" style="margin-top:12px;" lang="zh-CN">下载正式版</a>
+      <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os-stable.iso" class="btn btn-primary" style="margin-top:12px;" lang="zh-TW">下載正式版</a>
+      <br>
+      <a href="https://github.com/HuHuBasic/Basic-OS" class="btn btn-outline" target="_blank" style="margin-top:8px;font-size:.85rem;" lang="en">View on GitHub</a>
+      <a href="https://github.com/HuHuBasic/Basic-OS" class="btn btn-outline" target="_blank" style="margin-top:8px;font-size:.85rem;" lang="zh-CN">在 GitHub 上查看</a>
+      <a href="https://github.com/HuHuBasic/Basic-OS" class="btn btn-outline" target="_blank" style="margin-top:8px;font-size:.85rem;" lang="zh-TW">在 GitHub 上檢視</a>
     </div>
-    <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os.iso" class="btn btn-primary" style="margin-top:16px;" lang="en">Download ISO</a>
-    <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os.iso" class="btn btn-primary" style="margin-top:16px;" lang="zh-CN">下载 ISO</a>
-    <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os.iso" class="btn btn-primary" style="margin-top:16px;" lang="zh-TW">下載 ISO</a>
-    <br>
-    <a href="https://github.com/HuHuBasic/Basic-OS" class="btn btn-outline" target="_blank" style="margin-top:8px;" lang="en">View on GitHub</a>
-    <a href="https://github.com/HuHuBasic/Basic-OS" class="btn btn-outline" target="_blank" style="margin-top:8px;" lang="zh-CN">在 GitHub 上查看</a>
-    <a href="https://github.com/HuHuBasic/Basic-OS" class="btn btn-outline" target="_blank" style="margin-top:8px;" lang="zh-TW">在 GitHub 上檢視</a>
+
+    <!-- Beta -->
+    <div class="download-card beta">
+      <span class="edition-badge beta-badge" lang="en">BETA</span>
+      <span class="edition-badge beta-badge" lang="zh-CN">内测版</span>
+      <span class="edition-badge beta-badge" lang="zh-TW">內測版</span>
+      <h3>basic OS</h3>
+      <div class="edition-subtitle" lang="en">Internal Testing</div>
+      <div class="edition-subtitle" lang="zh-CN">内部测试版</div>
+      <div class="edition-subtitle" lang="zh-TW">內部測試版</div>
+      <div class="file-info">
+        <span lang="en">Version 1.0.0-beta</span>
+        <span lang="zh-CN">版本 1.0.0-beta</span>
+        <span lang="zh-TW">版本 1.0.0-beta</span>
+        &middot;
+        <span>~14 MB</span>
+        &middot;
+        <span>x86_64</span>
+      </div>
+      <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os-beta.iso" class="btn btn-outline" style="margin-top:12px;border-color:#a855f7;color:#a855f7;" lang="en">Download Beta</a>
+      <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os-beta.iso" class="btn btn-outline" style="margin-top:12px;border-color:#a855f7;color:#a855f7;" lang="zh-CN">下载内测版</a>
+      <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os-beta.iso" class="btn btn-outline" style="margin-top:12px;border-color:#a855f7;color:#a855f7;" lang="zh-TW">下載內測版</a>
+      <div class="activation-info">
+        <p lang="en"><strong>Activation required.</strong> The beta version needs an activation code to boot. Support us on Afdian to get one.</p>
+        <p lang="zh-CN"><strong>需要激活码。</strong>内测版启动需要激活码。在爱发电支持我们即可获取。</p>
+        <p lang="zh-TW"><strong>需要啟用碼。</strong>內測版啟動需要啟用碼。在愛發電支持我們即可獲取。</p>
+      </div>
+    </div>
   </div>
 </section>
 
