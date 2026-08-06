@@ -730,7 +730,7 @@ qemu-system-x86_64 -kernel vmlinuz-basic -initrd initramfs.cpio.gz -append "cons
     if (lang === currentLang) return;
     currentLang = lang;
     document.body.setAttribute('data-lang', lang);
-    document.querySelectorAll('[lang]').forEach(function(el) {
+    document.querySelectorAll('body [lang]').forEach(function(el) {
       if (el.getAttribute('lang') === lang) {
         el.classList.remove('lang-hidden');
       } else {
