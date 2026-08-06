@@ -693,20 +693,40 @@ body {
   position: relative; overflow: hidden;
 }
 .vm-screen {
-  flex: 1; position: relative; background: #000;
-  display: flex; align-items: center; justify-content: center;
+  flex: 1; position: relative; background: #000 !important;
+  overflow: hidden;
 }
-.vm-screen canvas { display: none; }
-.vm-screen .vm-boot-text {
+/* Force v86 terminal text to be ALWAYS visible (white on black) */
+/* v86 renders text-mode screen as nested divs with inline styles */
+/* v86 often sets color/background via inline styles, so we need high specificity */
+.vm-screen,
+.vm-screen * {
+  color: #aaa !important;
+  background-color: #000 !important;
+  text-shadow: none !important;
+}
+/* v86 canvas must stay visible */
+.vm-screen canvas {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  image-rendering: pixelated !important;
+}
+.vm-container > .vm-boot-text {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
   font-family: 'GeistMono', monospace; font-size: 0.78rem;
-  color: var(--accent2); text-align: center;
+  color: var(--accent2); text-align: center; z-index: 5;
+  pointer-events: none; background: rgba(0,0,0,0.94);
+  transition: opacity 0.35s ease;
 }
-.vm-screen .vm-boot-text .vm-loading-bar {
+.vm-container > .vm-boot-text .vm-loading-bar {
   display: inline-block; width: 200px; height: 3px;
   background: var(--bg3); border-radius: 2px; margin-top: 8px;
   overflow: hidden; vertical-align: middle;
 }
-.vm-screen .vm-boot-text .vm-loading-bar .bar {
+.vm-container > .vm-boot-text .vm-loading-bar .bar {
   height: 100%; background: var(--accent2); border-radius: 2px;
   width: 0%; animation: vmLoading 2s ease-in-out infinite;
 }
@@ -750,6 +770,11 @@ body {
   .start-menu { width: 100%; left: 0; }
   .settings-sidebar { width: 120px; }
   .store-grid { grid-template-columns: 1fr; }
+  #win-vm { width: 100% !important; height: calc(100vh - 56px) !important; left: 0 !important; top: 0 !important; border-radius: 0; resize: none; }
+  .vm-container { min-height: 0; }
+  .vm-screen { touch-action: none; }
+  .vm-toolbar { flex-wrap: wrap; gap: 4px; }
+  .vm-toolbar select { max-width: 80px; }
 }
 </style>
 </head>
@@ -1288,19 +1313,23 @@ body {
       <span class="vm-status-dot stopped" id="vmStatusDot"></span>
       <span id="vmStatusText">已停止</span>
     </span>
-    <button class="primary" id="vmStartBtn" onclick="startVM()">▶ 启动</button>
+    <select id="vmArchSelect" onchange="onVMArchChange()" style="background:var(--bg3);color:var(--ink);border:1px solid var(--rule);border-radius:4px;padding:4px 8px;font-size:0.7rem;font-family:inherit;cursor:pointer">
+      <option value="x86_64" selected>💻 64 位</option>
+      <option value="i386">🖥️ 32 位</option>
+      <option value="x86_64_32">🖧 64+32</option>
+    </select>
+    <button class="primary" id="vmStartBtn" onclick="startVM()" disabled title="v86 库加载中...">▶ 启动</button>
     <button id="vmStopBtn" onclick="stopVM()" style="display:none">⏹ 停止</button>
     <button id="vmSaveBtn" onclick="saveVMSnapshot()" style="display:none">💾 保存快照</button>
     <button class="danger" id="vmResetBtn" onclick="resetVM()" style="display:none">🔄 重置</button>
   </div>
   <div class="vm-container">
-    <div class="vm-screen" id="vmScreen">
-      <div class="vm-boot-text" id="vmBootText">
-        <div style="font-size:2rem;margin-bottom:8px">🖥️</div>
-        <div>Basic OS 虚拟机</div>
-        <div style="font-size:0.65rem;color:var(--muted);margin-top:8px">点击"启动"来开启你的虚拟机</div>
-        <div style="font-size:0.65rem;color:var(--muted);margin-top:4px">💡 每人拥有独立的永久虚拟机</div>
-      </div>
+    <div class="vm-screen" id="vmScreen"></div>
+    <div class="vm-boot-text" id="vmBootText">
+      <div style="font-size:2rem;margin-bottom:8px">🖥️</div>
+      <div>Basic OS 虚拟机</div>
+      <div style="font-size:0.65rem;color:var(--muted);margin-top:8px">点击"启动"来开启你的虚拟机</div>
+      <div style="font-size:0.65rem;color:var(--muted);margin-top:4px">💡 每人拥有独立的永久虚拟机</div>
     </div>
   </div>
 </div>
@@ -1339,7 +1368,6 @@ body {
   </div>
 </div>
 
-<script src="https://copy.sh/v86/libv86.js"></script>
 <script>
 // =============================================
 // PERSISTENCE LAYER (localStorage + IndexedDB)
@@ -1398,27 +1426,27 @@ if (!systemState.vmId) systemState.vmId = getVMId();
 saveState(systemState);
 
 // -- IndexedDB for File Storage --
-let db = null;
+let appDB = null;
 function openDB() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = (e) => {
-      const db = e.target.result;
-      if (!db.objectStoreNames.contains('files')) {
-        const store = db.createObjectStore('files', { keyPath: 'id', autoIncrement: true });
+      const appDB = e.target.result;
+      if (!appDB.objectStoreNames.contains('files')) {
+        const store = appDB.createObjectStore('files', { keyPath: 'id', autoIncrement: true });
         store.createIndex('name', 'name', { unique: false });
         store.createIndex('folder', 'folder', { unique: false });
       }
     };
-    req.onsuccess = (e) => { db = e.target.result; resolve(db); };
+    req.onsuccess = (e) => { appDB = e.target.result; resolve(appDB); };
     req.onerror = (e) => reject(e.target.error);
   });
 }
 
 function saveFileToDB(fileData) {
   return new Promise((resolve, reject) => {
-    if (!db) { reject(new Error('DB not open')); return; }
-    const tx = db.transaction('files', 'readwrite');
+    if (!appDB) { reject(new Error('DB not open')); return; }
+    const tx = appDB.transaction('files', 'readwrite');
     const store = tx.objectStore('files');
     const req = store.add(fileData);
     req.onsuccess = (e) => resolve(e.target.result);
@@ -1428,8 +1456,8 @@ function saveFileToDB(fileData) {
 
 function getAllFiles() {
   return new Promise((resolve, reject) => {
-    if (!db) { reject(new Error('DB not open')); return; }
-    const tx = db.transaction('files', 'readonly');
+    if (!appDB) { reject(new Error('DB not open')); return; }
+    const tx = appDB.transaction('files', 'readonly');
     const store = tx.objectStore('files');
     const req = store.getAll();
     req.onsuccess = (e) => resolve(e.target.result);
@@ -1439,8 +1467,8 @@ function getAllFiles() {
 
 function deleteFileFromDB(id) {
   return new Promise((resolve, reject) => {
-    if (!db) { reject(new Error('DB not open')); return; }
-    const tx = db.transaction('files', 'readwrite');
+    if (!appDB) { reject(new Error('DB not open')); return; }
+    const tx = appDB.transaction('files', 'readwrite');
     const store = tx.objectStore('files');
     const req = store.delete(id);
     req.onsuccess = () => resolve();
@@ -1450,8 +1478,8 @@ function deleteFileFromDB(id) {
 
 function clearAllFiles() {
   return new Promise((resolve, reject) => {
-    if (!db) { reject(new Error('DB not open')); return; }
-    const tx = db.transaction('files', 'readwrite');
+    if (!appDB) { reject(new Error('DB not open')); return; }
+    const tx = appDB.transaction('files', 'readwrite');
     const store = tx.objectStore('files');
     const req = store.clear();
     req.onsuccess = () => resolve();
@@ -1798,14 +1826,25 @@ function installUpdate() {
           document.getElementById('bootScreen').classList.add('hidden');
           setTimeout(() => {
             document.getElementById('bootScreen').style.display = 'none';
-            document.querySelector('.boot-subtitle').textContent = 'Basic OS v2.0 — 正在启动...';
+            document.querySelector('.boot-subtitle').textContent = 'Basic OS v' + systemState.version + ' — 正在启动...';
           }, 500);
           document.getElementById('trayVersion').textContent = 'v2.0.1';
           document.getElementById('trayUpdate').style.display = 'none';
           installBtn.style.display = 'none';
-          // Update settings display
+          // Update all version displays
           const verBadges = document.querySelectorAll('.version-badge');
           verBadges.forEach(b => b.textContent = 'Basic OS v2.0.1');
+          // Update tray popup
+          const trayPopupVal = document.querySelector('.tray-popup-value');
+          if (trayPopupVal) trayPopupVal.textContent = 'Basic OS v2.0.1';
+          // Update upgrade page
+          const verNum = document.querySelector('.ver-num');
+          if (verNum) verNum.textContent = 'Basic OS v2.0.1';
+          const verTags = document.querySelectorAll('.ver-tag.new');
+          verTags.forEach(t => t.textContent = 'v2.0.1');
+          // Update settings desktop env
+          const deskEnv = document.querySelector('.settings-row:nth-child(4) .value');
+          if (deskEnv) deskEnv.textContent = 'Basic Desktop v2.0.1';
           showToast('系统已更新到 v2.0.1', 'success');
         }, 2800);
       };
@@ -2148,7 +2187,7 @@ function handleTerminalInput(e) {
     openWindow('browser');
     out.innerHTML = '正在打开浏览器...<br>';
   } else if (cmd === 'about') {
-    out.innerHTML = 'HU basic OS v2.0<br>一个用于学习的 x86 操作系统内核<br>64/32/64+32 位 · 图形化桌面环境<br>MIT License · HuHuBasic<br>';
+    out.innerHTML = 'HU basic OS v' + systemState.version + '<br>一个用于学习的 x86 操作系统内核<br>64/32/64+32 位 · 图形化桌面环境<br>MIT License · HuHuBasic<br>';
   } else if (cmd === 'shutdown') {
     out.innerHTML = '系统正在关闭...<br>';
     setTimeout(() => showShutdown(), 500);
@@ -2282,7 +2321,7 @@ function getFileIcon(name) {
 }
 
 async function handleFileUpload(files) {
-  if (!db) {
+  if (!appDB) {
     showToast('浏览器不支持本地存储，请使用现代浏览器', 'warning');
     return;
   }
@@ -2330,7 +2369,7 @@ async function handleFileUpload(files) {
 
 async function refreshFileList() {
   const container = document.getElementById('filesListContainer');
-  if (!db) {
+  if (!appDB) {
     container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted)">⚠️ 浏览器不支持本地存储</div>';
     return;
   }
@@ -2368,9 +2407,9 @@ async function refreshFileList() {
 }
 
 async function downloadFileFromDB(id) {
-  if (!db) return;
+  if (!appDB) return;
   try {
-    const tx = db.transaction('files', 'readonly');
+    const tx = appDB.transaction('files', 'readonly');
     const store = tx.objectStore('files');
     const req = store.get(id);
     req.onsuccess = (e) => {
@@ -2439,15 +2478,47 @@ document.addEventListener('keydown', (e) => {
 // =============================================
 let vmEmulator = null;
 let vmRunning = false;
+let vmStarting = false;
 let vmAutoSaveInterval = null;
-const VM_AUTO_SAVE_MS = 30000; // Auto-save every 30 seconds
+const VM_AUTO_SAVE_MS = 30000;
 
-// Add VM state store to IndexedDB
+// Architecture configurations
+// boot_order: 0x1=floppy, 0x2=HDD, 0x4=CD-ROM, 0x8=network
+const VM_ARCH_CONFIGS = {
+  'x86_64':    { label: '64 位 (x86_64)', iso: '/basic-os-64.iso',    memory: 256, vga_memory: 16, icon: '💻', boot_order: 0x4, iso_size: 5099520 },
+  'i386':      { label: '32 位 (x86)',    iso: '/basic-os-32.iso',    memory: 128, vga_memory: 8,  icon: '🖥️', boot_order: 0x4, iso_size: 5179392 },
+  'x86_64_32': { label: '64+32 混合',     iso: '/basic-os-64-32.iso', memory: 256, vga_memory: 16, icon: '🖧', boot_order: 0x4, iso_size: 5122048 },
+};
+
+function getVMArchConfig() {
+  return VM_ARCH_CONFIGS[systemState.vmArch || 'x86_64'];
+}
+
+// Architecture change handler
+function onVMArchChange() {
+  if (vmRunning || vmStarting) {
+    showToast('请先停止虚拟机再切换架构', 'warning');
+    const sel = document.getElementById('vmArchSelect');
+    if (sel) sel.value = systemState.vmArch || 'x86_64';
+    return;
+  }
+  const newArch = document.getElementById('vmArchSelect').value;
+  systemState.vmArch = newArch;
+  saveState(systemState);
+  const cfg = VM_ARCH_CONFIGS[newArch];
+  document.getElementById('vmTitleId').textContent = cfg.label;
+  showToast('已切换到 ' + cfg.label + ' 架构', 'info');
+}
+
+// Add VM state store to IndexedDB (fix: close old appDB before reopening)
 function ensureVMStore() {
-  return new Promise((resolve, reject) => {
-    if (!db) { reject(new Error('DB not open')); return; }
-    if (db.objectStoreNames.contains('vm_snapshots')) { resolve(); return; }
-    db.close();
+  return new Promise((resolve) => {
+    if (!appDB) { resolve(); return; }
+    if (appDB.objectStoreNames.contains('vm_snapshots')) { resolve(); return; }
+    const timeout = setTimeout(() => resolve(), 3000);
+    // Close old connection before opening new version
+    const oldDb = appDB;
+    try { oldDb.close(); } catch(e) {}
     const req = indexedDB.open(DB_NAME, DB_VERSION + 1);
     req.onupgradeneeded = (e) => {
       const upgraded = e.target.result;
@@ -2456,52 +2527,68 @@ function ensureVMStore() {
       }
     };
     req.onsuccess = (e) => {
-      db = e.target.result;
+      clearTimeout(timeout);
+      appDB = e.target.result;
       resolve();
     };
-    req.onerror = (e) => reject(e.target.error);
+    req.onerror = () => { clearTimeout(timeout); resolve(); };
+    req.onblocked = () => { clearTimeout(timeout); resolve(); };
   });
 }
 
 function saveVMStateToDB(arrayBuffer) {
-  return new Promise((resolve, reject) => {
-    if (!db) { reject(new Error('DB not open')); return; }
-    const tx = db.transaction('vm_snapshots', 'readwrite');
-    const store = tx.objectStore('vm_snapshots');
-    const req = store.put({
-      vmId: systemState.vmId,
-      state: arrayBuffer,
-      savedAt: Date.now(),
-      memorySize: 64,
-      version: systemState.version
-    });
-    req.onsuccess = () => resolve();
-    req.onerror = (e) => reject(e.target.error);
+  return new Promise((resolve) => {
+    if (!appDB) { resolve(); return; }
+    try {
+      const tx = appDB.transaction('vm_snapshots', 'readwrite');
+      const store = tx.objectStore('vm_snapshots');
+      const cfg = getVMArchConfig();
+      const req = store.put({
+        vmId: systemState.vmId,
+        state: arrayBuffer,
+        savedAt: Date.now(),
+        memorySize: cfg.memory,
+        arch: systemState.vmArch || 'x86_64',
+        version: systemState.version
+      });
+      req.onsuccess = () => resolve();
+      req.onerror = () => resolve();
+    } catch(e) { resolve(); }
   });
 }
 
 function loadVMStateFromDB() {
-  return new Promise((resolve, reject) => {
-    if (!db) { reject(new Error('DB not open')); return; }
-    const tx = db.transaction('vm_snapshots', 'readonly');
-    const store = tx.objectStore('vm_snapshots');
-    const req = store.get(systemState.vmId);
-    req.onsuccess = (e) => {
-      const result = e.target.result;
-      resolve(result ? result.state : null);
-    };
-    req.onerror = (e) => reject(e.target.error);
+  return new Promise((resolve) => {
+    if (!appDB) { resolve(null); return; }
+    const timeout = setTimeout(() => resolve(null), 3000);
+    try {
+      const tx = appDB.transaction('vm_snapshots', 'readonly');
+      const store = tx.objectStore('vm_snapshots');
+      const req = store.get(systemState.vmId);
+      req.onsuccess = (e) => {
+        clearTimeout(timeout);
+        const result = e.target.result;
+        if (result && result.arch === (systemState.vmArch || 'x86_64')) {
+          resolve(result.state);
+        } else {
+          resolve(null); // Architecture mismatch, start fresh
+        }
+      };
+      req.onerror = () => { clearTimeout(timeout); resolve(null); };
+    } catch(e) { clearTimeout(timeout); resolve(null); }
   });
 }
 
 function deleteVMStateFromDB() {
   return new Promise((resolve, reject) => {
-    if (!db) { reject(new Error('DB not open')); return; }
-    const tx = db.transaction('vm_snapshots', 'readwrite');
-    const store = tx.objectStore('vm_snapshots');
-    const req = store.delete(systemState.vmId);
-    req.onsuccess = () => resolve();
-    req.onerror = (e) => reject(e.target.error);
+    if (!appDB) { reject(new Error('DB not open')); return; }
+    try {
+      const tx = appDB.transaction('vm_snapshots', 'readwrite');
+      const store = tx.objectStore('vm_snapshots');
+      const req = store.delete(systemState.vmId);
+      req.onsuccess = () => resolve();
+      req.onerror = (e) => reject(e.target.error);
+    } catch(e) { reject(e); }
   });
 }
 
@@ -2512,6 +2599,7 @@ function updateVMStatus(status) {
   const stopBtn = document.getElementById('vmStopBtn');
   const saveBtn = document.getElementById('vmSaveBtn');
   const resetBtn = document.getElementById('vmResetBtn');
+  const archSel = document.getElementById('vmArchSelect');
 
   dot.className = 'vm-status-dot';
   if (status === 'running') {
@@ -2521,7 +2609,9 @@ function updateVMStatus(status) {
     stopBtn.style.display = '';
     saveBtn.style.display = '';
     resetBtn.style.display = '';
-    document.getElementById('vmTitleId').textContent = 'Linux (Buildroot)';
+    if (archSel) archSel.disabled = true;
+    const cfg = getVMArchConfig();
+    document.getElementById('vmTitleId').textContent = cfg.label;
   } else if (status === 'stopped') {
     dot.classList.add('stopped');
     text.textContent = '已停止';
@@ -2529,6 +2619,7 @@ function updateVMStatus(status) {
     stopBtn.style.display = 'none';
     saveBtn.style.display = 'none';
     resetBtn.style.display = 'none';
+    if (archSel) archSel.disabled = false;
     document.getElementById('vmTitleId').textContent = '未启动';
   } else if (status === 'saving') {
     dot.classList.add('saving');
@@ -2536,94 +2627,198 @@ function updateVMStatus(status) {
   }
 }
 
+function enableVMStartButton() {
+  const startBtn = document.getElementById('vmStartBtn');
+  if (startBtn) {
+    startBtn.disabled = false;
+    startBtn.title = '点击启动虚拟机';
+  }
+}
+
+function showV86LoadError() {
+  const startBtn = document.getElementById('vmStartBtn');
+  if (startBtn) {
+    startBtn.disabled = true;
+    startBtn.title = 'v86 库加载失败';
+    startBtn.textContent = '⚠ 不可用';
+  }
+  const bootText = document.getElementById('vmBootText');
+  if (bootText) {
+    bootText.innerHTML = `
+      <div style="font-size:2rem;margin-bottom:8px">⚠️</div>
+      <div>v86 模拟器库加载失败</div>
+      <div style="font-size:0.65rem;color:var(--muted);margin-top:8px">请检查网络连接后刷新页面</div>
+      <button onclick="location.reload()" style="margin-top:12px;padding:6px 16px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-family:inherit;font-size:0.75rem">刷新页面</button>
+    `;
+  }
+}
+
 async function startVM() {
+  if (vmStarting || vmRunning) {
+    showToast('虚拟机正在启动或已运行', 'warning');
+    return;
+  }
+  if (!window.v86Loaded) {
+    showToast('v86 库仍在加载中，请稍候...', 'warning');
+    return;
+  }
+  if (window.v86LoadError) {
+    showToast('v86 库加载失败，请刷新页面重试', 'error');
+    return;
+  }
   if (typeof V86 === 'undefined') {
-    showToast('v86 库加载失败，请刷新页面重试', 'warning');
+    showToast('v86 库未就绪，请刷新页面重试', 'warning');
     return;
   }
 
+  vmStarting = true;
   updateVMStatus('saving');
+  const cfg = getVMArchConfig();
+  document.getElementById('vmTitleId').textContent = cfg.label;
   document.getElementById('vmBootText').innerHTML = `
-    <div style="font-size:2rem;margin-bottom:8px">🖥️</div>
-    <div>正在启动虚拟机...</div>
+    <div style="font-size:2rem;margin-bottom:8px">${cfg.icon}</div>
+    <div>正在启动 ${cfg.label} 虚拟机...</div>
     <div class="vm-loading-bar"><div class="bar"></div></div>
     <div style="font-size:0.65rem;color:var(--muted);margin-top:8px">初始化 x86 模拟器</div>
   `;
 
   try {
     await ensureVMStore();
-
-    // Check for saved state
     const savedState = await loadVMStateFromDB();
 
     if (savedState) {
       document.getElementById('vmBootText').innerHTML = `
-        <div style="font-size:2rem;margin-bottom:8px">🖥️</div>
+        <div style="font-size:2rem;margin-bottom:8px">${cfg.icon}</div>
         <div>正在恢复虚拟机快照...</div>
         <div class="vm-loading-bar"><div class="bar"></div></div>
         <div style="font-size:0.65rem;color:var(--muted);margin-top:8px">加载已保存的状态</div>
       `;
     }
 
-    // Create v86 instance
     const screenContainer = document.getElementById('vmScreen');
-    // Clear previous canvas if any
-    const existingCanvas = screenContainer.querySelector('canvas');
-    if (existingCanvas) existingCanvas.remove();
+    // v86 manages its own canvas/div elements - do NOT remove them
+    // (removing canvases causes "Cannot read properties of undefined (reading 'getContext')")
 
-    vmEmulator = new V86({
-      wasm_path: 'https://copy.sh/v86/v86.wasm',
-      memory_size: 64 * 1024 * 1024,
-      vga_memory_size: 4 * 1024 * 1024,
+    // Build V86 config based on saved state
+    const v86Config = {
+      wasm_path: '/v86/build/v86.wasm',
+      memory_size: cfg.memory * 1024 * 1024,
+      vga_memory_size: cfg.vga_memory * 1024 * 1024,
       screen_container: screenContainer,
-      bios: { url: 'https://copy.sh/v86/bios/seabios.bin' },
-      vga_bios: { url: 'https://copy.sh/v86/bios/vgabios.bin' },
-      cdrom: { url: 'https://copy.sh/v86/images/linux4.iso' },
+      bios: { url: '/v86/bios/seabios.bin' },
+      vga_bios: { url: '/v86/bios/vgabios.bin' },
       autostart: true,
+      boot_order: cfg.boot_order || 0x4, // 0x4=CD-ROM only (El Torito boot)
       disable_mouse: false,
       disable_keyboard: false,
-      network_relay_url: 'wss://relay.widgetry.org/',
-    });
+    };
 
-    // Hide boot text when VM is ready
-    vmEmulator.add_listener('screen-set-mode', (is_graphic) => {
-      const bootText = document.getElementById('vmBootText');
-      if (bootText) bootText.style.display = 'none';
-      const canvas = screenContainer.querySelector('canvas');
+    if (savedState) {
+      v86Config.initial_state = savedState;
+    } else {
+      // Use FreeDOS via our proxy (same-origin, no CORS issues)
+      v86Config.fda = { url: '/v86/images/freedos722.img', size: 737280 };
+      // Also mount Basic-OS ISO as CD-ROM for later use
+      v86Config.cdrom = { url: cfg.iso, size: cfg.iso_size };
+      v86Config.boot_order = 0x1; // Floppy first
+    }
+
+    vmEmulator = new V86(v86Config);
+
+    // Force canvas to stay visible (v86 hides it in text mode)
+    const forceCanvasVisible = () => {
+      const canvas = document.querySelector('#vmScreen canvas');
       if (canvas) {
-        canvas.style.display = '';
-        canvas.style.width = '100%';
-        canvas.style.height = '100%';
+        canvas.style.setProperty('display', 'block', 'important');
+        canvas.style.setProperty('width', '100%', 'important');
+        canvas.style.setProperty('height', '100%', 'important');
       }
+    };
+    // Run immediately and on every DOM change
+    forceCanvasVisible();
+    const canvasObserver = new MutationObserver(forceCanvasVisible);
+    canvasObserver.observe(screenContainer, { attributes: true, subtree: true, attributeFilter: ['style'] });
+
+    // Boot text hiding with opacity transition
+    let bootHidden = false;
+    const hideBootText = () => {
+      if (bootHidden) return;
+      bootHidden = true;
+      const bootText = document.getElementById('vmBootText');
+      if (bootText) {
+        bootText.style.opacity = '0';
+        setTimeout(() => { if (bootText) bootText.style.display = 'none'; }, 400);
+      }
+    };
+    const bootTimeout = setTimeout(hideBootText, 8000);
+
+    // Register ALL listeners BEFORE calling run()
+    vmEmulator.add_listener('screen-set-mode', (is_graphic) => {
+      // Hide boot text in both text and graphic mode
+      // (terminal text is now visible thanks to CSS override)
+      hideBootText();
     });
 
     vmEmulator.add_listener('emulator-started', () => {
       vmRunning = true;
+      vmStarting = false;
       updateVMStatus('running');
+      clearTimeout(bootTimeout);
+      hideBootText();
       showToast('虚拟机已启动', 'success');
-      // Start auto-save
       vmAutoSaveInterval = setInterval(autoSaveVM, VM_AUTO_SAVE_MS);
     });
 
-    // Restore saved state if available
-    if (savedState) {
-      try {
-        await vmEmulator.restore_state(savedState);
-        showToast('快照已恢复', 'info');
-      } catch(e) {
-        console.warn('Failed to restore VM state, starting fresh:', e);
-        showToast('快照恢复失败，从镜像启动', 'warning');
+    vmEmulator.add_listener('emulator-stopped', () => {
+      clearTimeout(bootTimeout);
+      if (vmAutoSaveInterval) {
+        clearInterval(vmAutoSaveInterval);
+        vmAutoSaveInterval = null;
       }
-    }
+      vmStarting = false;
+      if (vmRunning) {
+        vmRunning = false;
+        updateVMStatus('stopped');
+        showToast('虚拟机异常停止', 'warning');
+      }
+    });
+
+    vmEmulator.add_listener('error', (errorInfo) => {
+      console.error('VM error:', errorInfo);
+      clearTimeout(bootTimeout);
+      vmStarting = false;
+      vmRunning = false;
+      if (vmAutoSaveInterval) { clearInterval(vmAutoSaveInterval); vmAutoSaveInterval = null; }
+      updateVMStatus('stopped');
+      const bootText = document.getElementById('vmBootText');
+      if (bootText) {
+        bootText.style.opacity = '1';
+        bootText.style.display = '';
+        bootText.innerHTML = `
+          <div style="font-size:2rem;margin-bottom:8px">⚠️</div>
+          <div>虚拟机运行错误</div>
+          <div style="font-size:0.65rem;color:var(--muted);margin-top:8px">${JSON.stringify(errorInfo).substring(0, 200)}</div>
+          <button onclick="startVM()" style="margin-top:12px;padding:6px 16px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-family:inherit;font-size:0.75rem">重试</button>
+        `;
+      }
+      showToast('虚拟机运行错误，请重试', 'error');
+    });
+
   } catch(e) {
     console.error('VM start error:', e);
+    vmStarting = false;
     updateVMStatus('stopped');
-    document.getElementById('vmBootText').innerHTML = `
-      <div style="font-size:2rem;margin-bottom:8px">⚠️</div>
-      <div>虚拟机启动失败</div>
-      <div style="font-size:0.65rem;color:var(--muted);margin-top:8px">${e.message || '未知错误'}</div>
-      <button onclick="startVM()" style="margin-top:12px;padding:6px 16px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-family:inherit;font-size:0.75rem">重试</button>
-    `;
+    const bootText = document.getElementById('vmBootText');
+    if (bootText) {
+      bootText.style.opacity = '1';
+      bootText.style.display = '';
+      bootText.innerHTML = `
+        <div style="font-size:2rem;margin-bottom:8px">⚠️</div>
+        <div>虚拟机启动失败</div>
+        <div style="font-size:0.65rem;color:var(--muted);margin-top:8px">${e.message || '未知错误'}</div>
+        <button onclick="startVM()" style="margin-top:12px;padding:6px 16px;background:var(--accent);color:#fff;border:none;border-radius:4px;cursor:pointer;font-family:inherit;font-size:0.75rem">重试</button>
+      `;
+    }
   }
 }
 
@@ -2658,27 +2853,31 @@ async function saveVMSnapshot() {
   }
 }
 
-function stopVM() {
-  if (vmEmulator) {
-    try {
-      // Save before stopping
-      vmEmulator.save_state().then(state => {
-        saveVMStateToDB(state).catch(() => {});
-      }).catch(() => {});
-      vmEmulator.stop();
-    } catch(e) {}
-    vmEmulator = null;
-  }
+async function stopVM() {
   if (vmAutoSaveInterval) {
     clearInterval(vmAutoSaveInterval);
     vmAutoSaveInterval = null;
   }
+
+  if (vmEmulator) {
+    try {
+      updateVMStatus('saving');
+      const state = await vmEmulator.save_state();
+      await saveVMStateToDB(state);
+    } catch(e) {
+      console.warn('VM save on stop failed:', e);
+    }
+    try { vmEmulator.stop(); } catch(e) {}
+    vmEmulator = null;
+  }
+
   vmRunning = false;
+  vmStarting = false;
   updateVMStatus('stopped');
 
-  // Restore boot text
   const bootText = document.getElementById('vmBootText');
   if (bootText) {
+    bootText.style.opacity = '1';
     bootText.style.display = '';
     bootText.innerHTML = `
       <div style="font-size:2rem;margin-bottom:8px">🖥️</div>
@@ -2687,16 +2886,13 @@ function stopVM() {
       <div style="font-size:0.65rem;color:var(--muted);margin-top:4px">💡 每人拥有独立的永久虚拟机</div>
     `;
   }
-  // Remove canvas
-  const canvas = document.getElementById('vmScreen').querySelector('canvas');
-  if (canvas) canvas.remove();
 
   showToast('虚拟机已停止', 'info');
 }
 
 async function resetVM() {
   if (!confirm('确定要重置虚拟机吗？所有数据将丢失，此操作不可恢复！')) return;
-  stopVM();
+  await stopVM();
   try {
     await deleteVMStateFromDB();
     showToast('虚拟机已重置', 'success');
@@ -2736,11 +2932,32 @@ const aboutH2 = document.querySelector('#sec-about h2');
 if (aboutH2 && systemState.updateInstalled) {
   aboutH2.textContent = 'HU basic OS v' + systemState.version;
 }
+// Update upgrade page current version
+if (systemState.updateInstalled) {
+  const verNum = document.querySelector('.ver-num');
+  if (verNum) verNum.textContent = 'Basic OS v' + systemState.version;
+  const verTags = document.querySelectorAll('.ver-tag.new');
+  verTags.forEach(t => t.textContent = 'v' + systemState.version);
+  // Update settings desktop env
+  const deskEnv = document.querySelector('.settings-row:nth-child(4) .value');
+  if (deskEnv) deskEnv.textContent = 'Basic Desktop v' + systemState.version;
+}
 // Set boot subtitle
 if (systemState.updateInstalled) {
   document.querySelector('.boot-subtitle').textContent = 'Basic OS v' + systemState.version + ' — 正在启动...';
 }
 openWindow('browser');
+</script>
+
+<script src="/v86/build/libv86.js" onload="window.v86Loaded=true;enableVMStartButton()" onerror="window.v86LoadError=true;showV86LoadError()"></script>
+<script>
+// v86 loading timeout fallback: if not loaded in 15s, show error
+setTimeout(function() {
+  if (!window.v86Loaded && !window.v86LoadError) {
+    window.v86LoadError = true;
+    if (typeof showV86LoadError === 'function') showV86LoadError();
+  }
+}, 15000);
 </script>
 
 </body>
