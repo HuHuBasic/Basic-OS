@@ -612,9 +612,9 @@
         &middot;
         <span>x86_64</span>
       </div>
-      <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os-stable.iso" class="btn btn-primary" style="margin-top:12px;" lang="en">Download Stable</a>
-      <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os-stable.iso" class="btn btn-primary" style="margin-top:12px;" lang="zh-CN">下载正式版</a>
-      <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os-stable.iso" class="btn btn-primary" style="margin-top:12px;" lang="zh-TW">下載正式版</a>
+      <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os-stable.iso" class="btn btn-primary" style="margin-top:12px;" lang="en" onclick="trackDownload('stable')">Download Stable</a>
+      <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os-stable.iso" class="btn btn-primary" style="margin-top:12px;" lang="zh-CN" onclick="trackDownload('stable')">下载正式版</a>
+      <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os-stable.iso" class="btn btn-primary" style="margin-top:12px;" lang="zh-TW" onclick="trackDownload('stable')">下載正式版</a>
       <br>
       <a href="https://github.com/HuHuBasic/Basic-OS" class="btn btn-outline" target="_blank" style="margin-top:8px;font-size:.85rem;" lang="en">View on GitHub</a>
       <a href="https://github.com/HuHuBasic/Basic-OS" class="btn btn-outline" target="_blank" style="margin-top:8px;font-size:.85rem;" lang="zh-CN">在 GitHub 上查看</a>
@@ -639,9 +639,9 @@
         &middot;
         <span>x86_64</span>
       </div>
-      <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os-beta.iso" class="btn btn-outline" style="margin-top:12px;border-color:#a855f7;color:#a855f7;" lang="en">Download Beta</a>
-      <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os-beta.iso" class="btn btn-outline" style="margin-top:12px;border-color:#a855f7;color:#a855f7;" lang="zh-CN">下载内测版</a>
-      <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os-beta.iso" class="btn btn-outline" style="margin-top:12px;border-color:#a855f7;color:#a855f7;" lang="zh-TW">下載內測版</a>
+      <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os-beta.iso" class="btn btn-outline" style="margin-top:12px;border-color:#a855f7;color:#a855f7;" lang="en" onclick="trackDownload('beta')">Download Beta</a>
+      <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os-beta.iso" class="btn btn-outline" style="margin-top:12px;border-color:#a855f7;color:#a855f7;" lang="zh-CN" onclick="trackDownload('beta')">下载内测版</a>
+      <a href="https://github.com/HuHuBasic/Basic-OS/releases/latest/download/basic-os-beta.iso" class="btn btn-outline" style="margin-top:12px;border-color:#a855f7;color:#a855f7;" lang="zh-TW" onclick="trackDownload('beta')">下載內測版</a>
       <div class="activation-info">
         <p lang="en"><strong>Activation required.</strong> The beta version needs an activation code to boot. Support us on Afdian to get one.</p>
         <p lang="zh-CN"><strong>需要激活码。</strong>内测版启动需要激活码。在爱发电支持我们即可获取。</p>
@@ -686,6 +686,56 @@
       <span lang="zh-CN">在爱发电支持我</span>
       <span lang="zh-TW">在愛發電支持我</span>
     </a>
+  </div>
+</section>
+
+<!-- Activation Code Verification -->
+<section id="activate" style="padding-top:60px;">
+  <div class="section-title">
+    <h2 lang="en">Verify Activation Code</h2>
+    <h2 lang="zh-CN">验证激活码</h2>
+    <h2 lang="zh-TW">驗證啟用碼</h2>
+    <p lang="en">Check if your beta activation code is valid</p>
+    <p lang="zh-CN">检查你的内测版激活码是否有效</p>
+    <p lang="zh-TW">檢查你的內測版啟用碼是否有效</p>
+  </div>
+  <div style="max-width:480px;margin:0 auto;">
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <input type="text" id="activate-code" placeholder="XXXX-XXXX-XXXX-XXXX" maxlength="19" 
+        style="flex:1;padding:12px 16px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:1rem;font-family:monospace;letter-spacing:2px;text-transform:uppercase;"
+        oninput="this.value=this.value.toUpperCase()">
+      <button onclick="verifyCode()" class="btn btn-primary" style="white-space:nowrap;" id="verify-btn">
+        <span lang="en">Verify</span>
+        <span lang="zh-CN">验证</span>
+        <span lang="zh-TW">驗證</span>
+      </button>
+    </div>
+    <div id="verify-result" style="text-align:center;padding:12px;border-radius:8px;display:none;"></div>
+  </div>
+</section>
+
+<!-- Download Stats -->
+<section style="padding-top:20px;">
+  <div class="section-title">
+    <h2 lang="en">Download Statistics</h2>
+    <h2 lang="zh-CN">下载统计</h2>
+    <h2 lang="zh-TW">下載統計</h2>
+  </div>
+  <div style="max-width:480px;margin:0 auto;display:flex;gap:16px;justify-content:center;" id="stats-container">
+    <div class="feature-card" style="text-align:center;flex:1;min-width:120px;">
+      <div style="font-size:2rem;font-weight:800;color:var(--green);" id="stat-total">-</div>
+      <div class="label" lang="en" style="color:var(--text2);">Total</div>
+      <div class="label" lang="zh-CN" style="color:var(--text2);">总计</div>
+      <div class="label" lang="zh-TW" style="color:var(--text2);">總計</div>
+    </div>
+    <div class="feature-card" style="text-align:center;flex:1;min-width:120px;">
+      <div style="font-size:2rem;font-weight:800;color:var(--accent2);" id="stat-stable">-</div>
+      <div class="label" style="color:var(--text2);">Stable</div>
+    </div>
+    <div class="feature-card" style="text-align:center;flex:1;min-width:120px;">
+      <div style="font-size:2rem;font-weight:800;color:#a855f7;" id="stat-beta">-</div>
+      <div class="label" style="color:var(--text2);">Beta</div>
+    </div>
   </div>
 </section>
 
@@ -749,6 +799,91 @@ qemu-system-x86_64 -kernel vmlinuz-basic -initrd initramfs.cpio.gz -append "cons
   try { saved = localStorage.getItem('basic-os-lang') || 'en'; } catch(e) {}
   setLang(saved);
 })();
+
+// ---- Download Tracking ----
+var API_BASE = window.location.origin;
+
+function trackDownload(edition) {
+  try {
+    fetch(API_BASE + '/api/download.php', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({edition: edition, version: '1.0.0'})
+    }).then(function() {
+      loadStats();
+    });
+  } catch(e) {}
+}
+
+// ---- Activation Code Verification ----
+function verifyCode() {
+  var code = document.getElementById('activate-code').value.trim();
+  var result = document.getElementById('verify-result');
+  var btn = document.getElementById('verify-btn');
+  
+  if (!code) {
+    result.style.display = 'block';
+    result.style.background = 'rgba(245,158,11,0.1)';
+    result.style.border = '1px solid rgba(245,158,11,0.3)';
+    result.style.color = '#f59e0b';
+    result.textContent = document.body.getAttribute('data-lang') === 'zh-CN' ? '请输入激活码' : 'Please enter an activation code';
+    return;
+  }
+  
+  result.style.display = 'block';
+  result.style.background = 'rgba(59,130,246,0.1)';
+  result.style.border = '1px solid rgba(59,130,246,0.3)';
+  result.style.color = '#60a5fa';
+  result.textContent = document.body.getAttribute('data-lang') === 'zh-CN' ? '验证中...' : 'Verifying...';
+  
+  btn.disabled = true;
+  
+  fetch(API_BASE + '/api/verify.php', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({code: code})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.success) {
+      result.style.background = 'rgba(34,197,94,0.1)';
+      result.style.border = '1px solid rgba(34,197,94,0.3)';
+      result.style.color = '#22c55e';
+    } else {
+      result.style.background = 'rgba(239,68,68,0.1)';
+      result.style.border = '1px solid rgba(239,68,68,0.3)';
+      result.style.color = '#ef4444';
+    }
+    result.textContent = data.message;
+    btn.disabled = false;
+  })
+  .catch(function() {
+    result.style.display = 'block';
+    result.style.background = 'rgba(239,68,68,0.1)';
+    result.style.border = '1px solid rgba(239,68,68,0.3)';
+    result.style.color = '#ef4444';
+    result.textContent = document.body.getAttribute('data-lang') === 'zh-CN' ? '连接失败，请检查网络' : 'Connection failed, please check network';
+    btn.disabled = false;
+  });
+}
+
+// ---- Load Download Stats ----
+function loadStats() {
+  try {
+    fetch(API_BASE + '/api/download.php')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.success) {
+        document.getElementById('stat-total').textContent = data.total;
+        document.getElementById('stat-stable').textContent = data.stable;
+        document.getElementById('stat-beta').textContent = data.beta;
+      }
+    });
+  } catch(e) {}
+}
+
+// Load stats on page load
+loadStats();
 </script>
 </body>
 </html>
